@@ -1,13 +1,12 @@
 // LILIRVE — Phase 5 designer backend test suite (§49, 30 items + a few extras in the same spirit
-// as Phase 1/3/4's suites). Drives the REAL running app (real email OTP via Mailpit, real API
+// as Phase 1/3/4's suites). Drives the REAL running app (real email + password sign-in, real API
 // routes, real middleware) using the seeded personas: meera (approved), ramesh (pending),
 // priya (rejected), kabir (suspended), aanya (customer), admin.
 //
 // Prereqs: fresh `npm run db:reset` + `npx next dev -p 3100` running. Run with:
 //   node scripts/test-phase5-designer.mjs
 
-const APP_URL = "http://localhost:3100";
-const MAILPIT_URL = "http://127.0.0.1:54324";
+import { APP_URL, signInWithPassword } from "./lib/test-auth.mjs";
 
 let pass = 0;
 let fail = 0;
@@ -24,39 +23,9 @@ function check(label, condition, detail) {
   }
 }
 
-async function latestOtpFor(email) {
-  for (let attempt = 0; attempt < 20; attempt++) {
-    const res = await fetch(`${MAILPIT_URL}/api/v1/messages?query=${encodeURIComponent(`to:${email}`)}&limit=1`);
-    const search = await res.json();
-    if (search.messages?.length > 0) {
-      const msgRes = await fetch(`${MAILPIT_URL}/api/v1/message/${search.messages[0].ID}`);
-      const msg = await msgRes.json();
-      const match = (msg.Text || "").match(/\b(\d{6})\b/);
-      if (match) return match[1];
-    }
-    await new Promise((r) => setTimeout(r, 300));
-  }
-  throw new Error(`No OTP found for ${email}`);
-}
-
-async function signIn(email) {
-  await fetch(`${APP_URL}/api/auth/otp/request`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ email }),
-  });
-  const token = await latestOtpFor(email);
-  const verifyRes = await fetch(`${APP_URL}/api/auth/otp/verify`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ email, token }),
-  });
-  if (!verifyRes.ok) throw new Error(`otp/verify failed for ${email}`);
-  const setCookie = verifyRes.headers.getSetCookie
-    ? verifyRes.headers.getSetCookie()
-    : [verifyRes.headers.get("set-cookie")].filter(Boolean);
-  return setCookie.map((c) => c.split(";")[0]).join("; ");
-}
+/** Signs a SEEDED account in through the real app API (POST /api/auth/login — email + password,
+ *  exactly what the frontend does) and returns the session cookie header. */
+const signIn = (email) => signInWithPassword(email);
 
 async function api(cookie, path, options = {}) {
   const res = await fetch(`${APP_URL}${path}`, {
@@ -237,12 +206,33 @@ async function main() {
   console.log("\n=== 19/20. Collections CRUD + cross-designer denial ===");
   let collectionId;
   {
-    const create = await api(approved, "/api/designer/studio/collections", {
+    const noCover = await api(approved, "/api/designer/studio/collections", {
       method: "POST",
       body: JSON.stringify({ name: "Automated Test Collection", category: "Test" }),
     });
-    check("19. Designer can create their own collection", create.status === 200, create.data);
+    check("19a. Creating a collection without a cover image is rejected", noCover.status === 400, noCover.data);
+
+    const png = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=", "base64");
+    const form = new FormData();
+    form.append("file", new Blob([png], { type: "image/png" }), "cover.png");
+    form.append("bucket", "studioImages");
+    form.append("entityType", "collection_cover");
+    const uploadRes = await fetch(`${APP_URL}/api/uploads`, { method: "POST", headers: { cookie: approved }, body: form });
+    const uploadData = await uploadRes.json();
+    check("Collection cover upload succeeds", uploadRes.ok && !!uploadData.fileId, uploadData);
+
+    const create = await api(approved, "/api/designer/studio/collections", {
+      method: "POST",
+      body: JSON.stringify({ name: "Automated Test Collection", category: "Test", coverImageFileId: uploadData.fileId }),
+    });
+    check("19. Designer can create their own collection", create.status === 200 && !!create.data.collection?.coverImage, create.data);
     collectionId = create.data.collection?.id;
+
+    const foreignCover = await api(pending, "/api/designer/studio/collections", {
+      method: "POST",
+      body: JSON.stringify({ name: "Borrowed Cover", category: "Test", coverImageFileId: uploadData.fileId }),
+    });
+    check("19b. A designer cannot use another designer's upload as a cover", foreignCover.status === 400, foreignCover.data);
 
     const crossTry = await api(pending, `/api/designer/studio/collections/${collectionId}`, {
       method: "PATCH",

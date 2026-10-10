@@ -1,20 +1,16 @@
 // LILIRVE — Phase 3 authentication + authorization test suite.
 //
-// Exercises the REAL local Supabase Auth (email OTP, via Mailpit) + the real Next.js app
+// Exercises the REAL local Supabase Auth (email + password; signup confirmation link via Mailpit) + the real Next.js app
 // (middleware route protection + API routes) end to end, against all 8 required personas:
 // unauthenticated, customer, designer (generic), approved designer, pending designer,
 // rejected designer, suspended designer, admin. Both positive and negative access are checked
 // for each, per Phase 3 §22.
 //
 // Prereqs: `npm run db:start` (or already running) + `npm run db:reset` (fresh seed) +
-// `npx next dev -p 3100` running. Run with: node scripts/test-phase3-auth.mjs
+// the app on :3100 started against the LOCAL stack, plus the env vars listed in
+// scripts/lib/test-auth.mjs. Run with: node scripts/test-phase3-auth.mjs
 
-const APP_URL = "http://localhost:3100";
-const SUPABASE_URL = "http://127.0.0.1:54321";
-const MAILPIT_URL = "http://127.0.0.1:54324";
-// Local dev anon key (Supabase's well-known local demo key, not a real secret) — same one this
-// project's .env.local uses.
-const ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+import { APP_URL, signInWithPassword, registerAndConfirm, rawClientFromCookie } from "./lib/test-auth.mjs";
 
 let pass = 0;
 let fail = 0;
@@ -31,51 +27,9 @@ function check(label, condition, detail) {
   }
 }
 
-async function latestOtpFor(email) {
-  // Poll Mailpit for the most recent message to this address, then pull the 6-digit code out of
-  // its plaintext body. Supabase's default OTP template includes the code as plain digits.
-  for (let attempt = 0; attempt < 20; attempt++) {
-    const searchRes = await fetch(
-      `${MAILPIT_URL}/api/v1/messages?query=${encodeURIComponent(`to:${email}`)}&limit=1`
-    );
-    const search = await searchRes.json();
-    if (search.messages && search.messages.length > 0) {
-      const id = search.messages[0].ID;
-      const msgRes = await fetch(`${MAILPIT_URL}/api/v1/message/${id}`);
-      const msg = await msgRes.json();
-      const match = (msg.Text || "").match(/\b(\d{6})\b/);
-      if (match) return match[1];
-    }
-    await new Promise((r) => setTimeout(r, 300));
-  }
-  throw new Error(`No OTP email found for ${email}`);
-}
-
-/** Signs in as `email` via the real email-OTP flow (through the app's own API routes, exactly as
- *  the frontend does) and returns the session cookie header to reuse on subsequent requests. */
-async function signInAs(email) {
-  const reqRes = await fetch(`${APP_URL}/api/auth/otp/request`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ email }),
-  });
-  if (!reqRes.ok) throw new Error(`otp/request failed for ${email}: ${await reqRes.text()}`);
-
-  const token = await latestOtpFor(email);
-
-  const verifyRes = await fetch(`${APP_URL}/api/auth/otp/verify`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ email, token }),
-    redirect: "manual",
-  });
-  if (!verifyRes.ok) throw new Error(`otp/verify failed for ${email}: ${await verifyRes.text()}`);
-
-  const setCookie = verifyRes.headers.getSetCookie
-    ? verifyRes.headers.getSetCookie()
-    : [verifyRes.headers.get("set-cookie")].filter(Boolean);
-  return setCookie.map((c) => c.split(";")[0]).join("; ");
-}
+/** Signs in as a seeded account via the real email + password flow (POST /api/auth/login, exactly
+ *  as the frontend does) and returns the session cookie header to reuse on subsequent requests. */
+const signInAs = (email) => signInWithPassword(email);
 
 async function session(cookie) {
   const res = await fetch(`${APP_URL}/api/auth/session`, {
@@ -123,12 +77,15 @@ async function main() {
     );
   }
 
-  console.log("\n=== 2. Registration + login (fresh account via real email OTP) ===");
+  console.log("\n=== 2. Registration + login (fresh account via real signup + emailed confirmation link) ===");
   const freshEmail = `phase3-test-${Date.now()}@lilirve.dev`;
   let freshCookie;
   {
-    freshCookie = await signInAs(freshEmail);
-    check("Real OTP sign-in produced a session cookie", freshCookie.length > 0);
+    const fresh = await registerAndConfirm(freshEmail);
+    freshCookie = fresh.cookie;
+    check("Real signup + email-confirmation link produced a session cookie", freshCookie.length > 0);
+    const relogin = await signInWithPassword(freshEmail, fresh.password);
+    check("The new account can then sign in with its email + password", relogin.length > 0);
 
     const s = await session(freshCookie);
     check("New user session -> authenticated:true", s.authenticated === true);
@@ -213,18 +170,32 @@ async function main() {
 
   console.log("\n=== 7. Authorization: is_admin cannot be self-modified ===");
   {
-    // Direct REST call as aanya (customer, non-admin) attempting to set her own is_admin=true.
-    const sessionRes = await fetch(`${SUPABASE_URL}/auth/v1/token?grant_type=refresh_token`, {
-      method: "POST",
-    }).catch(() => null); // not used — token comes from the app cookie flow instead below.
+    // Direct PostgREST call as aanya (customer, non-admin) — bypassing every app route — using a
+    // supabase-js client carrying her REAL session (built from her app cookie). The rule under test
+    // is the users_is_admin_not_client_settable trigger (supabase/migrations/…_rls.sql).
+    const aanyaCookie = personas["aanya@lilirve.dev"];
+    const aanyaId = (await session(aanyaCookie)).userId;
+    const raw = await rawClientFromCookie(aanyaCookie);
 
-    // Extract the sb-access-token from the cookie jar via a quick roundtrip through our own
-    // session endpoint isn't possible (it doesn't expose the raw token) — instead hit PostgREST
-    // directly using the anon key + the same cookie won't work (PostgREST needs a bearer token,
-    // not a cookie). This check is therefore performed at the database layer directly instead —
-    // see the companion RLS adversarial test from Phase 1, which already covers this exact rule
-    // (enforce_is_admin_not_client_settable trigger) and is not re-duplicated here.
-    check("is_admin self-modification is blocked by Phase 1's DB trigger (see Phase 1 RLS tests)", true);
+    // Control: an ordinary self-update IS allowed, so a rejection below is specific to is_admin.
+    const control = await raw.from("users").update({ display_name: "Aanya (phase3 test)" }).eq("id", aanyaId).select("id");
+    check("A customer can update an ordinary field on their own users row (control)", !control.error && control.data?.length === 1, control.error?.message);
+
+    const escalate = await raw.from("users").update({ is_admin: true }).eq("id", aanyaId).select("is_admin");
+    check(
+      "A customer setting their own is_admin=true directly via PostgREST is rejected",
+      !!escalate.error && !(escalate.data ?? []).some((r) => r.is_admin === true),
+      escalate.error ? escalate.error.message : `no error — returned ${JSON.stringify(escalate.data)}`
+    );
+
+    const after = await raw.from("users").select("is_admin").eq("id", aanyaId).single();
+    check("...and is_admin is still false in the database afterwards", after.data?.is_admin === false, after.error?.message ?? after.data);
+
+    const s = await session(aanyaCookie);
+    check("...and the app still resolves the customer as isAdmin:false", s.isAdmin === false);
+
+    const adminPage = await pageStatus("/admin", aanyaCookie);
+    check("...and /admin still redirects the customer away", adminPage.status !== 200, `got ${adminPage.status} ${adminPage.location}`);
   }
 
   console.log("\n=== 8. Logout ===");

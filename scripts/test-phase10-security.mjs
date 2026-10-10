@@ -1,7 +1,7 @@
 // LILIRVE — Phase 10 final validation/security-hardening test suite. Covers genuinely NEW ground
 // not exercised by any Phase 3–9 test script: a REAL concurrent proposal-acceptance race against
 // the running database, dual-role (customer+designer on one identity) account isolation, invalid/
-// malformed OTP handling, the DB-level trigger blocking a directed request at a non-approved
+// malformed sign-in credential handling (originally OTP), the DB-level trigger blocking a directed request at a non-approved
 // designer, message sender-id spoofing resistance, and admin_audit_log immutability. Existing
 // IDOR/RLS/admin/payment/storage coverage from prior phases is treated as standing evidence and
 // re-run as regression (see the Phase 10 final report), not duplicated here.
@@ -11,8 +11,7 @@
 
 import { execSync } from "node:child_process";
 
-const APP_URL = "http://localhost:3100";
-const MAILPIT_URL = "http://127.0.0.1:54324";
+import { APP_URL, signInWithPassword, registerAndConfirm } from "./lib/test-auth.mjs";
 
 let pass = 0;
 let fail = 0;
@@ -35,37 +34,13 @@ function sql(query) {
   }).trim();
 }
 
-async function latestOtpFor(email) {
-  for (let attempt = 0; attempt < 20; attempt++) {
-    const res = await fetch(`${MAILPIT_URL}/api/v1/messages?query=${encodeURIComponent(`to:${email}`)}&limit=1`);
-    const search = await res.json();
-    if (search.messages?.length > 0) {
-      const msgRes = await fetch(`${MAILPIT_URL}/api/v1/message/${search.messages[0].ID}`);
-      const msg = await msgRes.json();
-      const match = (msg.Text || "").match(/\b(\d{6})\b/);
-      if (match) return match[1];
-    }
-    await new Promise((r) => setTimeout(r, 300));
-  }
-  throw new Error(`No OTP found for ${email}`);
-}
+/** Signs a SEEDED account in through the real app API (POST /api/auth/login — email + password,
+ *  exactly what the frontend does) and returns the session cookie header. */
+const signIn = (email) => signInWithPassword(email);
 
-async function signIn(email) {
-  await fetch(`${APP_URL}/api/auth/otp/request`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ email }),
-  });
-  const token = await latestOtpFor(email);
-  const verifyRes = await fetch(`${APP_URL}/api/auth/otp/verify`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ email, token }),
-  });
-  if (!verifyRes.ok) throw new Error(`otp/verify failed for ${email}`);
-  const setCookie = verifyRes.headers.getSetCookie ? verifyRes.headers.getSetCookie() : [verifyRes.headers.get("set-cookie")].filter(Boolean);
-  return setCookie.map((c) => c.split(";")[0]).join("; ");
-}
+/** A BRAND-NEW account via the real signup + emailed confirmation-link flow (replaces the old OTP
+ *  auto-create-on-first-sign-in behavior); returns the session cookie header. */
+const signUpFresh = async (email) => (await registerAndConfirm(email)).cookie;
 
 async function api(cookie, path, options = {}) {
   const res = await fetch(`${APP_URL}${path}`, {
@@ -124,7 +99,7 @@ async function main() {
   console.log("\n=== 5-8. Dual-role account (one identity, both a customer and designer profile) ===");
   {
     const dualEmail = `phase10-dual-${Date.now()}@lilirve.dev`;
-    const dualCookie = await signIn(dualEmail);
+    const dualCookie = await signUpFresh(dualEmail);
 
     const customerProfile = await api(dualCookie, "/api/profile/customer", { method: "POST", body: JSON.stringify({ name: "Dual Role Test", city: "Pune" }) });
     check("   (setup) Real customer profile created", customerProfile.status === 200, customerProfile.data);
@@ -152,21 +127,24 @@ async function main() {
     check("8. Having a designer profile does not interfere with normal customer access", requestsList.status === 200 && (requestsList.data.requests ?? []).some((r) => r.title === "Dual role customer request"), requestsList.data);
   }
 
-  console.log("\n=== 9/10. Invalid/malformed OTP is safely rejected, never leaks info ===");
+  // Migrated from "invalid/malformed OTP": sign-in is now email + password (POST /api/auth/login),
+  // so the same three guarantees are checked against that route — a wrong credential is rejected
+  // generically, a malformed body is rejected, and a failed attempt doesn't lock out the real one.
+  console.log("\n=== 9/10. Invalid/malformed sign-in credentials are safely rejected, never leak info ===");
   {
-    const freshEmail = `phase10-otp-${Date.now()}@lilirve.dev`;
-    await fetch(`${APP_URL}/api/auth/otp/request`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email: freshEmail }) });
+    const freshEmail = `phase10-login-${Date.now()}@lilirve.dev`;
+    const { password } = await registerAndConfirm(freshEmail);
+    const leaks = (m) => /postgres|supabase|stack|at\s+\w+\.\w+\s*\(/i.test(m);
 
-    const wrong = await api(null, "/api/auth/otp/verify", { method: "POST", body: JSON.stringify({ email: freshEmail, token: "000000" }) });
-    check("9. A wrong OTP code is rejected, with a generic message (no stack trace/internal detail)", wrong.status >= 400 && typeof wrong.data.message === "string" && !/postgres|supabase|stack|at\s+\w+\.\w+\s*\(/i.test(wrong.data.message), wrong.data);
+    const wrong = await api(null, "/api/auth/login", { method: "POST", body: JSON.stringify({ email: freshEmail, password: `${password}-wrong` }) });
+    check("9. A wrong password is rejected, with a generic message (no stack trace/internal detail)", wrong.status >= 400 && typeof wrong.data.message === "string" && !leaks(wrong.data.message), wrong.data);
 
-    const malformed = await api(null, "/api/auth/otp/verify", { method: "POST", body: JSON.stringify({ email: freshEmail, token: "not-a-code" }) });
-    check("10. A malformed (non-numeric) OTP token is also safely rejected", malformed.status >= 400, malformed.data);
+    const malformed = await api(null, "/api/auth/login", { method: "POST", body: JSON.stringify({ email: freshEmail, password: 12345678 }) });
+    check("10. A malformed sign-in body (non-string password) is also safely rejected", malformed.status >= 400 && typeof malformed.data.message === "string" && !leaks(malformed.data.message), malformed.data);
 
-    // The real code still works afterward — a wrong attempt doesn't lock out the real one.
-    const realToken = await latestOtpFor(freshEmail);
-    const real = await api(null, "/api/auth/otp/verify", { method: "POST", body: JSON.stringify({ email: freshEmail, token: realToken }) });
-    check("    The REAL code still works after a prior wrong attempt", real.status === 200, real.data);
+    // The real password still works afterward — a wrong attempt doesn't lock out the real one.
+    const real = await api(null, "/api/auth/login", { method: "POST", body: JSON.stringify({ email: freshEmail, password }) });
+    check("    The REAL password still works after a prior wrong attempt", real.status === 200, real.data);
   }
 
   console.log("\n=== 11. A directed (private) request cannot target a non-approved designer (DB trigger) ===");

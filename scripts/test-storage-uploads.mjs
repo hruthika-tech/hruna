@@ -1,5 +1,5 @@
-// LILIRVE — Storage/Uploads gap-fill test suite. Drives the REAL running app (real email OTP via
-// Mailpit, real API routes) plus a couple of direct supabase-js calls (with the anon key, as a
+// LILIRVE — Storage/Uploads gap-fill test suite. Drives the REAL running app (real email + password sign-in;
+// signup confirmation via Mailpit, real API routes) plus a couple of direct supabase-js calls (with the anon key, as a
 // signed-in user) for adversarial RLS checks that must bypass the app's own routes entirely.
 //
 // Covers the fix made this pass: `files_select`/`request_images_select`/
@@ -14,13 +14,15 @@
 // Prereqs: `npm run db:start` + a fresh `npm run db:reset` + `npx next dev -p 3100` running.
 // Run with: node scripts/test-storage-uploads.mjs
 
-import { createClient } from "@supabase/supabase-js";
+import { execSync } from "node:child_process";
+import { APP_URL, signInWithPassword, registerAndConfirm, registerDirect } from "./lib/test-auth.mjs";
 
-const APP_URL = "http://localhost:3100";
-const MAILPIT_URL = "http://127.0.0.1:54324";
-const SUPABASE_URL = "http://127.0.0.1:54321";
-const ANON_KEY =
-  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6ImFub24iLCJleHAiOjE5ODM4MTI5OTZ9.CRXP1A7WOeoJeXxjNni43kdQwgnWNReilDMblYTn_I0";
+/** Read-only check against the LOCAL Supabase DB container (same helper as the Phase 10 suite). */
+function sql(query) {
+  return execSync(`docker exec -i supabase_db_lilirve-app psql -U postgres -d postgres -t -A -c "${query.replace(/"/g, '\\"')}"`, {
+    encoding: "utf8",
+  }).trim();
+}
 
 const PNG_BYTES = Buffer.from(
   "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=",
@@ -42,52 +44,18 @@ function check(label, condition, detail) {
   }
 }
 
-async function latestOtpFor(email) {
-  for (let attempt = 0; attempt < 20; attempt++) {
-    const res = await fetch(`${MAILPIT_URL}/api/v1/messages?query=${encodeURIComponent(`to:${email}`)}&limit=1`);
-    const search = await res.json();
-    if (search.messages?.length > 0) {
-      const msgRes = await fetch(`${MAILPIT_URL}/api/v1/message/${search.messages[0].ID}`);
-      const msg = await msgRes.json();
-      const match = (msg.Text || "").match(/\b(\d{6})\b/);
-      if (match) return match[1];
-    }
-    await new Promise((r) => setTimeout(r, 300));
-  }
-  throw new Error(`No OTP found for ${email}`);
-}
+/** Signs a SEEDED account in through the real app API (POST /api/auth/login — email + password,
+ *  exactly what the frontend does) and returns the session cookie header. */
+const signIn = (email) => signInWithPassword(email);
 
-async function signIn(email) {
-  await fetch(`${APP_URL}/api/auth/otp/request`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ email }),
-  });
-  const token = await latestOtpFor(email);
-  const verifyRes = await fetch(`${APP_URL}/api/auth/otp/verify`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ email, token }),
-  });
-  if (!verifyRes.ok) throw new Error(`otp/verify failed for ${email}`);
-  const setCookie = verifyRes.headers.getSetCookie ? verifyRes.headers.getSetCookie() : [verifyRes.headers.get("set-cookie")].filter(Boolean);
-  return setCookie.map((c) => c.split(";")[0]).join("; ");
-}
+/** A BRAND-NEW account via the real signup + emailed confirmation-link flow (replaces the old OTP
+ *  auto-create-on-first-sign-in behavior); returns the session cookie header. */
+const signUpFresh = async (email) => (await registerAndConfirm(email)).cookie;
 
-/** Signs in via the anon-key supabase-js client too (same account) — used for direct RLS checks
- *  against storage.objects that must bypass the app's own routes entirely. */
-async function signInDirect(email) {
-  await fetch(`${APP_URL}/api/auth/otp/request`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ email }),
-  });
-  const token = await latestOtpFor(email);
-  const client = createClient(SUPABASE_URL, ANON_KEY);
-  const { error } = await client.auth.verifyOtp({ email, token, type: "email" });
-  if (error) throw error;
-  return client;
-}
+/** A BRAND-NEW account signed in directly with the anon-key supabase-js client (signUp + emailed
+ *  confirmation token) — used for direct RLS checks against storage.objects that must bypass the
+ *  app's own routes entirely. */
+const signUpFreshDirect = async (email) => (await registerDirect(email)).client;
 
 async function api(cookie, path, options = {}) {
   const res = await fetch(`${APP_URL}${path}`, {
@@ -116,7 +84,7 @@ async function main() {
   // A second, freshly-created customer — needed for diary-isolation checks, since ramesh (a
   // designer with no customer profile at all) can't stand in for "a different customer" there.
   const freshCustomerEmail = `storage-customer-${Date.now()}@lilirve.dev`;
-  const customerB = await signIn(freshCustomerEmail);
+  const customerB = await signUpFresh(freshCustomerEmail);
   await api(customerB, "/api/profile/customer", { method: "POST", body: JSON.stringify({ name: "Storage Test Customer B" }) });
 
   console.log("\n=== 1/2. Eligible designer can now see a shared request image (was previously always empty) ===");
@@ -151,7 +119,7 @@ async function main() {
   console.log("\n=== 4. An unrelated user cannot directly sign a URL for another customer's request-image ===");
   {
     const freshEmail = `storage-audit-${Date.now()}@lilirve.dev`;
-    const freshClient = await signInDirect(freshEmail);
+    const freshClient = await signUpFreshDirect(freshEmail);
     const { data: signed, error } = await freshClient.storage.from("request-images").createSignedUrl(requestImagePath, 300);
     check("4. Direct storage.objects RLS denies an unrelated, freshly-signed-up user", !!error && !signed, { error: error?.message });
   }
@@ -240,6 +208,45 @@ async function main() {
     form.append("entityType", "customer_avatar");
     const res = await fetch(`${APP_URL}/api/uploads`, { method: "POST", body: form });
     check("13. Unauthenticated upload is rejected (401)", res.status === 401);
+  }
+
+  console.log("\n=== 14. Request images must be the customer's OWN uploads in request-images ===");
+  {
+    const createWith = (imageFileIds, title) =>
+      api(aanya, "/api/requests", {
+        method: "POST",
+        body: JSON.stringify({ title, category: "Occasion Wear", description: "x", budgetMin: 5000, budgetMax: 10000, dueDate: "2027-01-01", imageFileIds }),
+      });
+    const genericRejection = (res) => res.status === 400 && res.data.message === "One or more images couldn't be used. Please upload them again.";
+
+    const own = await uploadImage(aanya, "requestImages", "request_image");
+    const ok = await createWith([own.fileId], "Ownership test — own image");
+    check("14a. A customer can attach their own request-images upload", ok.status === 200 && (ok.data.request?.inspirationImages ?? []).length === 1, ok.data);
+
+    const foreign = await uploadImage(customerB, "requestImages", "request_image");
+    const stolen = await createWith([foreign.fileId], "Ownership test — foreign file");
+    check("14b. Attaching ANOTHER customer's request image is rejected (generic message, nothing about the file)", genericRejection(stolen) && !JSON.stringify(stolen.data).includes(foreign.fileId), stolen.data);
+
+    const diary = await uploadImage(aanya, "diaryImages", "diary_image");
+    const wrongBucket = await createWith([diary.fileId], "Ownership test — wrong bucket");
+    check("14c. Attaching the customer's own file from a DIFFERENT bucket (diary-images) is rejected", genericRejection(wrongBucket), wrongBucket.data);
+
+    const missing = await createWith(["00000000-0000-4000-8000-0000000000aa"], "Ownership test — nonexistent");
+    check("14d. A nonexistent file id is rejected", genericRejection(missing), missing.data);
+
+    const malformed = await createWith(["not-a-uuid"], "Ownership test — malformed");
+    check("    A malformed file id is rejected cleanly (400, not a 500)", genericRejection(malformed), malformed.data);
+
+    const mixedTitle = `Ownership test — mixed ${Date.now()}`;
+    const own2 = await uploadImage(aanya, "requestImages", "request_image");
+    const mixed = await createWith([own2.fileId, foreign.fileId], mixedTitle);
+    check("14e. A mix of valid + invalid ids rejects the whole request", genericRejection(mixed), mixed.data);
+    const createdRows = sql(`select count(*) from public.fashion_requests where title = '${mixedTitle.replace(/'/g, "''")}';`);
+    check("     ...and NO request row was created", createdRows === "0", { createdRows });
+    const linkedRows = sql(`select count(*) from public.request_images where file_id in ('${own2.fileId}', '${foreign.fileId}');`);
+    check("     ...and NO request_images association exists for either file", linkedRows === "0", { linkedRows });
+    const foreignEverLinked = sql(`select count(*) from public.request_images where file_id = '${foreign.fileId}';`);
+    check("     ...and the other customer's file was never linked by any attempt above", foreignEverLinked === "0", { foreignEverLinked });
   }
 
   console.log(`\n${pass} passed, ${fail} failed.`);

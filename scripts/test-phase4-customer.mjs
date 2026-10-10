@@ -1,18 +1,12 @@
 // LILIRVE — Phase 4 customer backend test suite (§28 of the brief, all 19 items + a few extra
 // RLS adversarial checks in the same spirit as Phase 1/3's suites). Drives the REAL running app
-// (real email OTP via Mailpit, real API routes, real middleware) plus a couple of direct
+// (real email + password sign-in, real API routes, real middleware) plus a couple of direct
 // supabase-js calls for adversarial RLS checks that must bypass the friendly API entirely.
 //
-// Prereqs: `npm run db:start` + a fresh `npm run db:reset` + the review-fixture SQL applied +
+// Prereqs: `npm run db:start` + a fresh `npm run db:reset` + supabase/test-fixtures/phase4-review.sql applied +
 // `npx next dev -p 3100` running. Run with: node scripts/test-phase4-customer.mjs
 
-import { createClient } from "@supabase/supabase-js";
-
-const APP_URL = "http://localhost:3100";
-const SUPABASE_URL = "http://127.0.0.1:54321";
-const ANON_KEY =
-  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6ImFub24iLCJleHAiOjE5ODM4MTI5OTZ9.CRXP1A7WOeoJeXxjNni43kdQwgnWNReilDMblYTn_I0";
-const MAILPIT_URL = "http://127.0.0.1:54324";
+import { APP_URL, signInWithPassword, registerAndConfirm, rawClientFromCookie } from "./lib/test-auth.mjs";
 
 let pass = 0;
 let fail = 0;
@@ -29,60 +23,19 @@ function check(label, condition, detail) {
   }
 }
 
-async function latestOtpFor(email) {
-  for (let attempt = 0; attempt < 20; attempt++) {
-    const res = await fetch(`${MAILPIT_URL}/api/v1/messages?query=${encodeURIComponent(`to:${email}`)}&limit=1`);
-    const search = await res.json();
-    if (search.messages?.length > 0) {
-      const msgRes = await fetch(`${MAILPIT_URL}/api/v1/message/${search.messages[0].ID}`);
-      const msg = await msgRes.json();
-      const match = (msg.Text || "").match(/\b(\d{6})\b/);
-      if (match) return match[1];
-    }
-    await new Promise((r) => setTimeout(r, 300));
-  }
-  throw new Error(`No OTP found for ${email}`);
+/** Signs a SEEDED account in through the REAL app API (POST /api/auth/login, exactly what the
+ *  frontend does) and returns a cookie header plus a raw supabase-js client built from the same
+ *  session (not a second sign-in) for direct-to-PostgREST adversarial RLS checks. */
+async function signIn(email) {
+  const cookie = await signInWithPassword(email);
+  return { cookie, raw: await rawClientFromCookie(cookie) };
 }
 
-/** Signs in through the REAL app API (exactly what the frontend does) and returns a cookie header
- *  plus a raw supabase-js client authenticated as the same user (for direct RLS checks). */
-async function signIn(email) {
-  const reqRes = await fetch(`${APP_URL}/api/auth/otp/request`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ email }),
-  });
-  if (!reqRes.ok) throw new Error(`otp/request failed for ${email}`);
-  const token = await latestOtpFor(email);
-
-  const verifyRes = await fetch(`${APP_URL}/api/auth/otp/verify`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ email, token }),
-  });
-  if (!verifyRes.ok) throw new Error(`otp/verify failed for ${email}`);
-  const setCookie = verifyRes.headers.getSetCookie
-    ? verifyRes.headers.getSetCookie()
-    : [verifyRes.headers.get("set-cookie")].filter(Boolean);
-  const cookie = setCookie.map((c) => c.split(";")[0]).join("; ");
-
-  // A raw supabase-js client for direct-to-PostgREST adversarial calls that bypass our own API
-  // routes — built from the SAME session the cookie carries (not a second independent OTP
-  // round-trip): local Auth's max_frequency ("1s" between emails to the same address) can
-  // silently reject a second signInWithOtp() sent moments after the first, which would leave this
-  // client on an anon session that then makes every RLS check below look like a false failure.
-  // Extracting the already-established access/refresh token instead sidesteps that outright.
-  const authCookie = setCookie.find((c) => /^sb-.*-auth-token=/.test(c));
-  const rawValue = authCookie.split(";")[0].split("=").slice(1).join("=");
-  const decoded = JSON.parse(Buffer.from(rawValue.replace(/^base64-/, ""), "base64").toString("utf8"));
-  const raw = createClient(SUPABASE_URL, ANON_KEY);
-  const { error: sessionError } = await raw.auth.setSession({
-    access_token: decoded.access_token,
-    refresh_token: decoded.refresh_token,
-  });
-  if (sessionError) throw new Error(`raw client setSession failed for ${email}: ${sessionError.message}`);
-
-  return { cookie, raw };
+/** Same return shape, for a BRAND-NEW account registered through the real signup + emailed
+ *  confirmation-link flow (replaces the old OTP auto-create-on-first-sign-in behavior). */
+async function signUpFresh(email) {
+  const { cookie } = await registerAndConfirm(email);
+  return { cookie, raw: await rawClientFromCookie(cookie) };
 }
 
 async function api(cookie, path, options = {}) {
@@ -98,7 +51,7 @@ async function main() {
   console.log("\n=== Setup: sign in as two customers + the seeded approved designer ===");
   const customerA = await signIn("aanya@lilirve.dev"); // seeded, has an existing profile + requests
   const freshEmail = `phase4-customerB-${Date.now()}@lilirve.dev`;
-  const customerB = await signIn(freshEmail);
+  const customerB = await signUpFresh(freshEmail);
   await api(customerB.cookie, "/api/profile/customer", {
     method: "POST",
     body: JSON.stringify({ name: "Customer B", city: "Mumbai" }),

@@ -7,8 +7,7 @@
 // Prereqs: `npm run db:start` + a fresh `npm run db:reset` + `npx next dev -p 3100` running.
 // Run with: node scripts/test-phase9-integration.mjs
 
-const APP_URL = "http://localhost:3100";
-const MAILPIT_URL = "http://127.0.0.1:54324";
+import { APP_URL, signInWithPassword, registerAndConfirm } from "./lib/test-auth.mjs";
 
 let pass = 0;
 let fail = 0;
@@ -25,37 +24,13 @@ function check(label, condition, detail) {
   }
 }
 
-async function latestOtpFor(email) {
-  for (let attempt = 0; attempt < 20; attempt++) {
-    const res = await fetch(`${MAILPIT_URL}/api/v1/messages?query=${encodeURIComponent(`to:${email}`)}&limit=1`);
-    const search = await res.json();
-    if (search.messages?.length > 0) {
-      const msgRes = await fetch(`${MAILPIT_URL}/api/v1/message/${search.messages[0].ID}`);
-      const msg = await msgRes.json();
-      const match = (msg.Text || "").match(/\b(\d{6})\b/);
-      if (match) return match[1];
-    }
-    await new Promise((r) => setTimeout(r, 300));
-  }
-  throw new Error(`No OTP found for ${email}`);
-}
+/** Signs a SEEDED account in through the real app API (POST /api/auth/login — email + password,
+ *  exactly what the frontend does) and returns the session cookie header. */
+const signIn = (email) => signInWithPassword(email);
 
-async function signIn(email) {
-  await fetch(`${APP_URL}/api/auth/otp/request`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ email }),
-  });
-  const token = await latestOtpFor(email);
-  const verifyRes = await fetch(`${APP_URL}/api/auth/otp/verify`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ email, token }),
-  });
-  if (!verifyRes.ok) throw new Error(`otp/verify failed for ${email}`);
-  const setCookie = verifyRes.headers.getSetCookie ? verifyRes.headers.getSetCookie() : [verifyRes.headers.get("set-cookie")].filter(Boolean);
-  return setCookie.map((c) => c.split(";")[0]).join("; ");
-}
+/** A BRAND-NEW account via the real signup + emailed confirmation-link flow (replaces the old OTP
+ *  auto-create-on-first-sign-in behavior); returns the session cookie header. */
+const signUpFresh = async (email) => (await registerAndConfirm(email)).cookie;
 
 async function api(cookie, path, options = {}) {
   const res = await fetch(`${APP_URL}${path}`, {
@@ -70,7 +45,7 @@ async function main() {
   console.log("\n=== 1-3. Onboarding wizard actually creates a real customer profile now ===");
   {
     const freshEmail = `phase9-onboarding-${Date.now()}@lilirve.dev`;
-    const cookie = await signIn(freshEmail);
+    const cookie = await signUpFresh(freshEmail);
 
     const before = await api(cookie, "/api/requests");
     check("1. A brand-new signup with no profile yet is correctly rejected from customer-only actions", before.status === 403, before.data);

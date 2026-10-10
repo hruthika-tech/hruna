@@ -1,5 +1,4 @@
-// LILIRVE — Phase 7 full-site audit test suite. Drives the REAL running app (real email OTP via
-// Mailpit, real API routes, real pages) verifying the fixes made this phase: the customer
+// LILIRVE — Phase 7 full-site audit test suite. Drives the REAL running app (real email + password sign-in, real API routes, real pages) verifying the fixes made this phase: the customer
 // discovery surface (Home/Discover/dress/collection detail) reading real Supabase data instead of
 // lib/mock-data.ts, the Navbar/DesignerNavbar/SubscriptionGate reading the REAL signed-in user
 // instead of the seeded mock currentCustomer/currentDesigner, and the Saved Items page correctly
@@ -9,8 +8,7 @@
 // (scratchpad/phase6-fixtures.sql) + `npx next dev -p 3100` running.
 // Run with: node scripts/test-phase7-audit.mjs
 
-const APP_URL = "http://localhost:3100";
-const MAILPIT_URL = "http://127.0.0.1:54324";
+import { APP_URL, signInWithPassword } from "./lib/test-auth.mjs";
 
 // Fingerprints unique to the old mock catalog (lib/mock-data.ts) — if any of these ever show up in
 // a real page's response again, the mock data has regressed back in.
@@ -42,39 +40,9 @@ function noMockFingerprints(text) {
   return !MOCK_IDS.some((id) => text.includes(`"${id}"`));
 }
 
-async function latestOtpFor(email) {
-  for (let attempt = 0; attempt < 20; attempt++) {
-    const res = await fetch(`${MAILPIT_URL}/api/v1/messages?query=${encodeURIComponent(`to:${email}`)}&limit=1`);
-    const search = await res.json();
-    if (search.messages?.length > 0) {
-      const msgRes = await fetch(`${MAILPIT_URL}/api/v1/message/${search.messages[0].ID}`);
-      const msg = await msgRes.json();
-      const match = (msg.Text || "").match(/\b(\d{6})\b/);
-      if (match) return match[1];
-    }
-    await new Promise((r) => setTimeout(r, 300));
-  }
-  throw new Error(`No OTP found for ${email}`);
-}
-
-async function signIn(email) {
-  await fetch(`${APP_URL}/api/auth/otp/request`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ email }),
-  });
-  const token = await latestOtpFor(email);
-  const verifyRes = await fetch(`${APP_URL}/api/auth/otp/verify`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ email, token }),
-  });
-  if (!verifyRes.ok) throw new Error(`otp/verify failed for ${email}`);
-  const setCookie = verifyRes.headers.getSetCookie
-    ? verifyRes.headers.getSetCookie()
-    : [verifyRes.headers.get("set-cookie")].filter(Boolean);
-  return setCookie.map((c) => c.split(";")[0]).join("; ");
-}
+/** Signs a SEEDED account in through the real app API (POST /api/auth/login — email + password,
+ *  exactly what the frontend does) and returns the session cookie header. */
+const signIn = (email) => signInWithPassword(email);
 
 async function api(cookie, path, options = {}) {
   const res = await fetch(`${APP_URL}${path}`, {

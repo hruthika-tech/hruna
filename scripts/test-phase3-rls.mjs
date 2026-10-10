@@ -4,14 +4,9 @@
 // authorization complements RLS rather than bypasses it" requirement (§17) and the same
 // methodology as Phase 1's adversarial RLS suite.
 //
-// Run with: node scripts/test-phase3-rls.mjs
+// Run with: node scripts/test-phase3-rls.mjs (local stack only — env vars in scripts/lib/test-auth.mjs)
 
-import { createClient } from "@supabase/supabase-js";
-
-const SUPABASE_URL = "http://127.0.0.1:54321";
-const ANON_KEY =
-  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6ImFub24iLCJleHAiOjE5ODM4MTI5OTZ9.CRXP1A7WOeoJeXxjNni43kdQwgnWNReilDMblYTn_I0";
-const MAILPIT_URL = "http://127.0.0.1:54324";
+import { registerDirect } from "./lib/test-auth.mjs";
 
 let pass = 0;
 let fail = 0;
@@ -26,29 +21,9 @@ function check(label, condition, detail) {
   }
 }
 
-async function latestOtpFor(email) {
-  for (let attempt = 0; attempt < 20; attempt++) {
-    const res = await fetch(`${MAILPIT_URL}/api/v1/messages?query=${encodeURIComponent(`to:${email}`)}&limit=1`);
-    const search = await res.json();
-    if (search.messages?.length > 0) {
-      const msgRes = await fetch(`${MAILPIT_URL}/api/v1/message/${search.messages[0].ID}`);
-      const msg = await msgRes.json();
-      const match = (msg.Text || "").match(/\b(\d{6})\b/);
-      if (match) return match[1];
-    }
-    await new Promise((r) => setTimeout(r, 300));
-  }
-  throw new Error(`No OTP found for ${email}`);
-}
-
-async function signIn(email) {
-  const client = createClient(SUPABASE_URL, ANON_KEY);
-  await client.auth.signInWithOtp({ email, options: { shouldCreateUser: true } });
-  const token = await latestOtpFor(email);
-  const { data, error } = await client.auth.verifyOtp({ email, token, type: "email" });
-  if (error) throw error;
-  return { client, userId: data.user.id };
-}
+/** A brand-new, email-confirmed account signed in directly against local Supabase (signUp +
+ *  emailed confirmation token) — replaces the old signInWithOtp({ shouldCreateUser }) path. */
+const signIn = (email) => registerDirect(email);
 
 async function main() {
   console.log("\n=== Adversarial RLS: spoofed user_id / role, straight through PostgREST ===");
