@@ -21,6 +21,46 @@ Then open http://localhost:3000.
 > has no network access) — install locally to run and verify it. If you hit a dependency
 > resolution issue, run `npm install --legacy-peer-deps`.
 
+## Current Authentication Implementation
+
+**This section is authoritative.** The phase-by-phase sections further down are a development
+history; where they describe email-OTP login, `/verify-otp`, or `/api/auth/otp/*`, that design
+was replaced and those routes/pages no longer exist.
+
+Supabase Auth (`auth.users`) owns every credential. `public.users` mirrors only `id`, `email`,
+`display_name` and `is_admin` (synced by the `on_auth_user_created` trigger) and never stores a
+password.
+
+| Flow | Pages | API / mechanism |
+|---|---|---|
+| **Sign in** — email + password | `/login` | `POST /api/auth/login` → `supabase.auth.signInWithPassword()`. Returns `redirectTo: "/admin"` for admins; everyone else continues to `?next=` (default `/home`). |
+| **Register** | `/create-account` → `/verify-email` | `POST /api/auth/signup` → `supabase.auth.signUp()` with name, email and password (rules in `lib/auth/password.ts`: ≥ 8 chars, a letter and a number). Rejects an email that already has an account. No session is created until the email is confirmed. |
+| **Email confirmation** — link | `/auth/confirm` → `/setup-password` → `/choose-role` | The emailed link (`supabase/templates/confirmation.html`) carries a `token_hash`; `app/auth/confirm/route.ts` calls `verifyOtp({ type, token_hash })` to create the session. (`verifyOtp` here verifies the **link token** — it is not a typed one-time code.) `/setup-password` skips straight to `/choose-role` when the password was already set at signup. Resend: `POST /api/auth/resend`. |
+| **Forgot / reset password** — link | `/forgot-password` → `/reset-password` | `POST /api/auth/forgot-password` → `resetPasswordForEmail()` (template `recovery.html`). The link lands on `/reset-password` (directly, or via `/auth/confirm` which forwards the token), which verifies it and calls `updateUser({ password })` in the browser. |
+| **Change password** (signed in) | Customer `/profile` → Security → *Change Password* card | `POST /api/auth/change-password` — re-verifies the current password with `signInWithPassword()`, then `updateUser()`. |
+| **Sign out** | Profile pages | `POST /api/auth/logout` → `signOut()` |
+| **Session / role check** | — | `GET /api/auth/session` → `getAuthContext()` (`lib/supabase/authorization.ts`) |
+
+**Role-specific notes**
+
+- **Designers** have no change-password form yet (`/designer/profile` → Security only explains the
+  above and offers Log Out). A designer can set a new password with *Forgot password?* on `/login`.
+- **Admins** sign in through the same `/login`. The admin-settings password fields are a disabled
+  placeholder — change an admin password in **Supabase Dashboard → Authentication → Users**.
+  `is_admin` is set out-of-band only (never client-settable). Admin accounts are kept out of the
+  customer/designer areas (`assertNotAdmin`, middleware redirect to `/admin`).
+- One account per email: a customer becomes a designer by adding a designer profile to the same
+  Auth user (`/choose-role` → `/designer-onboarding`), not by registering again.
+
+**Not implemented / known gaps**
+
+- No email-OTP or magic-link sign-in. `supabase/templates/magic_link.html` is a leftover file that
+  nothing references.
+- No SMS/phone verification — the designer phone number is an optional, unverified contact field.
+- The `scripts/test-*.mjs` suites still authenticate through the removed `/api/auth/otp/request`
+  and `/api/auth/otp/verify` routes, so they cannot sign in as written; their auth helpers need
+  updating to use `/api/auth/login` before they can be run again.
+
 ## Data-consistency correction (this delivery)
 
 Earlier phases had customer requests, designer requests, and project data living in separate
@@ -67,7 +107,7 @@ Concretely, this fixes:
 ## What's included (Phase 2 — designer journey, new in this delivery)
 
 - **Auth flow correction**: account creation no longer routes straight into customer
-  onboarding. After OTP verification, `/choose-role` lets the person pick "Commission
+  onboarding. After email verification, `/choose-role` lets the person pick "Commission
   Fashion" (customer) or "Showcase My Craft" (designer) — role selection happens *after*
   the account exists, per the spec.
 - **Designer onboarding**: professional info (type, experience, specializations) → studio
@@ -103,8 +143,9 @@ Concretely, this fixes:
   Toast, ProgressBar/Stepper/Timeline, ImageUploader, Rating).
 - **Public**: Landing page, Designer Discovery (search + filters), Public Designer Studio
   (view-only), Collection Details, Dress Details.
-- **Auth**: Create Account → OTP verification (with resend/invalid/expired states) → Login →
-  Forgot Password. Account creation never asks for a role up front, per the LILIRVE spec.
+- **Auth**: Create Account (email + password) → email verification link (with resend/invalid/
+  expired states) → Login → Forgot Password. Account creation never asks for a role up front, per
+  the LILIRVE spec. See [Current Authentication Implementation](#current-authentication-implementation).
 - **Customer onboarding**: multi-step profile, location, style-preference flow.
 - **Customer home**: editorial discovery dashboard (recommended designers, collections,
   dresses).
@@ -139,7 +180,8 @@ apprenticeship, and family/business alongside formal education, and none of them
 approval. Optional credentials (degree/diploma/certification) can be attached but are never
 required.
 
-**Onboarding** (`/designer-onboarding`) is a real 8-step flow — Account (phone OTP) →
+**Onboarding** (`/designer-onboarding`) is a real 8-step flow — Account (name, photo, optional
+unverified phone; the original mock phone OTP was removed) →
 Professional Profile → Experience → Portfolio (min. 3 items + an explicit ownership
 declaration) → Identity (DOB + a simulated KYC hand-off) → Studio (writes directly into the
 same `Designer` record Manage Studio already edits — no duplicate studio system) → Review →
@@ -348,7 +390,8 @@ what's already here.
 ```
 app/
   page.tsx                 → landing page
-  login/, create-account/, verify-otp/, forgot-password/  → shared auth
+  login/, create-account/, verify-email/, setup-password/,
+  forgot-password/, reset-password/, auth/confirm/  → shared auth (see Current Authentication Implementation)
   choose-role/              → post-verification role selection (customer vs designer)
   onboarding/               → customer onboarding
   designer-onboarding/       → designer onboarding
@@ -418,9 +461,10 @@ design rationale; this is the as-built summary.
   comments in `20260829180010_reviews.sql` and `20260829180013_rls.sql` for the full explanation.
 - **Local dev**: `npm run db:start` (needs Docker Desktop running), `npm run db:reset` to
   re-apply migrations + seed from a clean slate, `npm run db:types` to regenerate
-  `types/supabase.ts`. Test accounts (password `password123` for all): `admin@lilirve.dev`,
-  `aanya@lilirve.dev` (customer), `meera@lilirve.dev` (approved designer),
-  `ramesh@lilirve.dev` (pending designer).
+  `types/supabase.ts`. The **local** seed (`supabase/seed.sql`, local stack only — never run
+  against the hosted project) creates test accounts `admin@lilirve.dev`, `aanya@lilirve.dev`
+  (customer), `meera@lilirve.dev` (approved designer) and `ramesh@lilirve.dev` (pending
+  designer), all with a shared dev-only password defined in that file.
 - **Deliberately not built in this phase**: any business API route, the proposal-accept/
   sibling-decline orchestration (the schema *guarantees* it can't be done unsafely, but doesn't
   implement the transaction itself), request/project status-transition validation, Razorpay
@@ -463,13 +507,19 @@ business logic and the frontend still renders from `lib/store.ts`'s mock data ex
 
 ## Authentication + authorization + RBAC (Phase 3)
 
+> **Historical record.** The *authorization* parts below (`lib/supabase/authorization.ts`,
+> `lib/auth/routes.ts`, middleware, profile-creation rules) still describe the current code. The
+> *sign-in method* (email OTP, `/verify-otp`, `/api/auth/otp/*`) was later replaced by email +
+> password — those bullets are marked **[Superseded]**. For how auth works today, see
+> [Current Authentication Implementation](#current-authentication-implementation).
+
 Real Supabase Auth, real sessions, real server-side route protection. Still no business APIs
 (request/proposal/project/messaging/studio/review/subscription/payment/upload — all later phases)
 and the frontend still renders mostly from `lib/store.ts`'s mock data; only the minimum
 authentication surface needed to prove auth/authz actually work was wired into the UI.
 
-- **Method: email OTP only**, per the finalized architecture — no passwords exist anywhere in this
-  system. `public.users` never stores a credential (see `supabase/migrations/20260829180003_users_and_profiles.sql`);
+- **[Superseded — now email + password]** **Method: email OTP only**, per the finalized
+  architecture at the time — no passwords exist anywhere in this system. `public.users` never stores a credential (see `supabase/migrations/20260829180003_users_and_profiles.sql`);
   Supabase Auth (`auth.users`) owns the credential entirely.
 - **`lib/supabase/authorization.ts`** — the authorization foundation (§12): `getAuthContext()`
   resolves `{ user, isAdmin, customerId, designerId, isApprovedDesigner, designerOverallStatus }`
@@ -492,7 +542,8 @@ authentication surface needed to prove auth/authz actually work was wired into t
   valid session, not yet a completed profile — see the file's scope note for why (`/onboarding` and
   `/designer-onboarding` are still mock wizards this phase deliberately didn't rewire; profile
   completion stays separate from authentication per §19).
-- **`app/api/auth/{otp/request,otp/verify,logout,session}/route.ts`** — the registration+login+
+- **[Superseded — `otp/request` and `otp/verify` no longer exist; `logout` and `session` remain]**
+  **`app/api/auth/{otp/request,otp/verify,logout,session}/route.ts`** — the registration+login+
   logout+session-check foundation. `otp/request` serves both registration and login in one call
   (`shouldCreateUser: true`); the `on_auth_user_created` trigger auto-provisions the matching
   `public.users` row, so there's no separate "create account" endpoint and no way to duplicate an
@@ -505,14 +556,18 @@ authentication surface needed to prove auth/authz actually work was wired into t
   `customer_profiles_insert_self` / `designer_profiles_insert_self` policies. Creating a designer
   profile does not set any verified/approved state — `designer_verifications` is auto-provisioned
   at `not_submitted` and only an admin can move it to `approved` (§9, §13).
-- **Minimum frontend wiring** (§24 — not a redesign): `/login` and `/create-account` now call
+- **[Superseded — `/verify-otp` was removed; `/login` and `/create-account` use passwords again and
+  `/forgot-password` is a working reset flow]** **Minimum frontend wiring** (§24 — not a
+  redesign): `/login` and `/create-account` now call
   `otp/request` and route to `/verify-otp` instead of a fake `setTimeout`; `/verify-otp`'s
   `OtpForm` calls `otp/verify` for real instead of checking a hardcoded `"1234"`. Password fields
   were removed from both forms (there is nothing for them to authenticate against — see "Method"
   above); `/forgot-password` is left in place, unlinked, since a passwordless system has no
   password to reset (§ "do not remove existing pages" — the page still exists, just nothing links
   to it anymore).
-- **Local dev email OTP delivery**: the default Supabase magic-link template only renders a
+- **[Superseded — the `[auth.email.template.magic_link]` block is no longer in `config.toml`;
+  `magic_link.html` is an unused leftover]** **Local dev email OTP delivery**: the default Supabase
+  magic-link template only renders a
   clickable link, not digits — but this app's UI is a type-the-code form. Added
   `supabase/templates/magic_link.html` + a `[auth.email.template.magic_link]` block in
   `supabase/config.toml` so local dev email (viewable at Mailpit, `http://127.0.0.1:54324`) shows
@@ -521,7 +576,9 @@ authentication surface needed to prove auth/authz actually work was wired into t
   rejected, `kabir@lilirve.dev` = suspended) alongside the existing approved/pending ones, so all 5
   `designer_overall_status` values have a real seeded account for testing (dev-only data, no schema
   change).
-- **Testing** (§22) — `scripts/test-phase3-auth.mjs` drives the real app (real email OTP through
+- **[Outdated — these scripts still sign in via the removed `otp/*` routes; see Known gaps in
+  Current Authentication Implementation]** **Testing** (§22) — `scripts/test-phase3-auth.mjs`
+  drives the real app (real email OTP through
   Mailpit, real middleware, real API routes) through all 8 required personas — unauthenticated,
   fresh customer, and the 4 seeded designer verification states plus admin — checking both positive
   and negative access (28 checks, all passing). `scripts/test-phase3-rls.mjs` bypasses the app
@@ -650,7 +707,8 @@ reused as-is; only data sources, missing actions, and loading/empty/error states
   addressed* request (RLS has no designer-write policy on `fashion_requests` at all, by Phase 1's
   original design — declining a public request via swipe IS real); designer Settings' password
   fields and notification toggles (no passwords exist in this system at all — Phase 3 — and no
-  notification-preference schema exists); the single onboarding "credential" fields (institution/
+  notification-preference schema exists) *[historical: passwords exist again; the designer
+  Security tab now has no password form — see Current Authentication Implementation]*; the single onboarding "credential" fields (institution/
   qualification/year — `designer_credentials` exists in the schema but no CRUD route was built for
   it this phase, a deliberate scope cut given its minor role in the existing UI); a dedicated
   Earnings page (no such page exists anywhere in the current frontend to connect — inspected and
@@ -1063,7 +1121,8 @@ search) and one real form whose submit action never called any API at all.
   actually approved, matching the swipe feed's own eligibility rule — completions, reviews,
   verification status changes). "Read" state stays exactly as ephemeral as the original mock's own
   behavior (plain `useState`, resets on reload) — not persisted, since the mock never did either.
-- **A genuinely fake success state found and fixed — `/forgot-password`.** Confirmed completely
+- **[Superseded — `/forgot-password` is now a real reset flow linked from `/login`]**
+  **A genuinely fake success state found and fixed — `/forgot-password`.** Confirmed completely
   unreferenced anywhere in the app (no page links to it — `/login`'s real OTP flow never grew a
   link to it). Its form previously faked success ("We've sent a password reset link to...") with no
   real email sent — meaningless anyway, since LILIRVE has no passwords at all (Phase 3, email-OTP
@@ -1113,7 +1172,7 @@ no application code change. The only addition is one new test file.
   designer-only actions independently, and that holding one profile grants zero privilege on the
   other (a dual-role designer with no approval yet is still correctly denied the approved-only
   feed, exactly like any other unapproved designer).
-- **Invalid/malformed OTP handling**: confirmed a wrong or malformed code is safely rejected with a
+- **[Historical — OTP sign-in no longer exists]** **Invalid/malformed OTP handling**: confirmed a wrong or malformed code is safely rejected with a
   generic message (no stack trace, no internal detail), and that a wrong attempt never blocks the
   real code from working afterward.
 - **Message sender-identity spoofing**: confirmed a client-supplied `senderId`/`sender_id` field in
@@ -1127,7 +1186,7 @@ no application code change. The only addition is one new test file.
   attempted UPDATE under the `authenticated` role leaves the row genuinely unchanged.
 - **Rate limiting**: Supabase Auth's own built-in limits (`supabase/config.toml`'s
   `[auth.rate_limit]` — `token_verifications`/`sign_in_sign_ups` = 30 per 5 min per IP,
-  `email_sent` = 2/hour, `max_frequency` = 1s between OTP sends) are the existing, unmodified
+  `email_sent` = 2/hour, `max_frequency` = 1s between signup-confirmation / password-reset emails) are the existing, unmodified
   defaults and are the appropriate protection for this attack surface — documented rather than
   duplicated with new application-level infrastructure. Production deployment needs a real SMTP
   provider with its own send-rate configuration (a launch-time config item, not a code gap).

@@ -1,8 +1,38 @@
 # LILIRVE — Backend & Database Architecture
 
-**Status: Phase 1 (database schema) is now IMPLEMENTED — see `supabase/` and the "Supabase
-database" section of `README.md` for the as-built record. This document remains the planning
-rationale; API routes, auth wiring, and frontend integration are still not built (Phase 2+).**
+**Status: this is the pre-implementation PLANNING document.** The schema, API routes, auth and
+frontend integration have since been built — `supabase/migrations/` and `README.md` are the
+as-built record. Where this plan and the code differ, the code wins. For authentication in
+particular, read **Current Authentication Implementation** directly below instead of §9/§9a.
+
+## Current Authentication Implementation
+
+*As built — verified against the code; supersedes §9 and §9a. Full flow table in `README.md`.*
+
+- **Provider: Supabase Auth** (`@supabase/ssr`), cookie-based sessions refreshed in
+  `lib/supabase/middleware.ts`. Auth.js / NextAuth (planned in §9) was never used.
+- **Sign in: email + password.** `POST /api/auth/login` → `supabase.auth.signInWithPassword()`.
+  There is no OTP / magic-link / code-based sign-in.
+- **Register:** `POST /api/auth/signup` → `supabase.auth.signUp()` (name, email, password) — one
+  Auth account per email; roles are added afterwards as customer/designer profiles on that account.
+- **Email confirmation: a link.** Supabase emails a `token_hash` link → `/auth/confirm`
+  (`verifyOtp({ type, token_hash })` validates the *link token*) → session created.
+- **Forgot / reset password: a link.** `POST /api/auth/forgot-password` →
+  `resetPasswordForEmail()` → `/reset-password` → `updateUser({ password })`.
+- **Change password:** customers only, via the Change Password card on `/profile`
+  (`POST /api/auth/change-password`, which re-checks the current password). Designers have no
+  change-password form (they use *Forgot password?*). Admin passwords are changed in **Supabase
+  Dashboard → Authentication → Users**.
+- **Credentials and verification state live only in `auth.users`.** `public.users` holds `id`,
+  `email`, `display_name`, `is_admin`, `created_at` — no password, no `email_verified_at`.
+  Email-confirmed status is read from `auth.users.email_confirmed_at`.
+- **Authorization:** `lib/supabase/authorization.ts` (`requireUser/Customer/Designer/Admin`) over
+  the SQL helpers `is_admin()`, `current_customer_id()`, `current_designer_id()`, enforced again by
+  RLS. Admins (`users.is_admin`, set out-of-band only) are kept out of customer/designer areas.
+
+**Planned but never implemented:** the `verification_codes` table (§9a), `users.email_verified_at`,
+`users.phone_verified_at`, and any SMS/phone verification. Supabase Auth's own email tokens replaced
+the custom-code design.
 
 This document has gone through three passes:
 - **Phase 0** — full frontend audit + first-draft architecture, every genuine ambiguity flagged
@@ -43,7 +73,7 @@ This document has gone through three passes:
 | 2 | Image storage **finalized** as normalized child tables (id, parent id, `file_id` → `files`, position, created_at) for every multi-image entity — no more "array column" alternative left open. | §6.3, §6.5-ish (n/a), §11 (rewritten) |
 | 3 | Payment provider **finalized**: Razorpay, India-first, behind the existing `PaymentService` abstraction (provider-swappable). Master OFF switch behavior reaffirmed. | §6.8, new §11a |
 | 4 | Admin model **finalized**: flat `users.is_admin` boolean, no tiers. | §0a, §10 (reaffirmed) |
-| 5 | OTP **finalized**: email-only for MVP, full verification-code schema defined, never stores raw codes, shaped to add phone later without a redesign. | New §9a |
+| 5 | OTP **finalized**: email-only for MVP, full verification-code schema defined, never stores raw codes, shaped to add phone later without a redesign. *(Never implemented — superseded by Supabase Auth email + password; see Current Authentication Implementation.)* | New §9a |
 | 6 | Private/directed requests **can only target a verified designer** — resolves the one open sub-case from Round 1. | §6.3, §13 |
 | 7 | Review ↔ Project relationship **reconfirmed** exactly as Round 1 defined it (0..1, customer-authored, immutable, non-anonymous, one per project). No designer→customer reviews. | §6.5 (unchanged) |
 | 8 | Canonical-source-of-truth principle **explicitly reconfirmed** end-to-end, now consistent everywhere including `projects`. | §7, new §18 |
@@ -69,7 +99,8 @@ Full detail in the version history of this document; nothing here changed in Rou
 ### 6.1 Identity & accounts *(unchanged from Round 1)*
 
 `users` (no `role` column; `is_admin` boolean — **reconfirmed flat, no tiers, correction 4**;
-`display_name`, `email_verified_at`, no account-level `status`), `customer_profiles` (0..1 per
+`display_name`, `email_verified_at` *(planned; not built — confirmation lives in
+`auth.users.email_confirmed_at`)*, no account-level `status`), `customer_profiles` (0..1 per
 user, own `status`), `designer_profiles` (0..1 per user, standing via
 `designer_verifications.overall_status`), `designer_verifications`,
 `designer_onboarding_credentials`, `designer_portfolio_items`, `admin_audit_log` — all unchanged.
@@ -277,6 +308,11 @@ Round 1 finalized them.
 
 ## 9. Authentication architecture *(unchanged from Round 1)* + 9a. OTP — **finalized (correction 5)**
 
+> **Planning history — not as built.** Authentication was implemented with **Supabase Auth and
+> email + password**, not Auth.js and not a custom OTP. The `verification_codes` table below was
+> **never created** (it exists in no migration), and the `/verify-otp` screen it refers to no
+> longer exists. See **Current Authentication Implementation** at the top of this document.
+
 Auth.js (NextAuth v5), Credentials provider, httpOnly session cookie; dual-profile registration
 flow, session shape `{userId, isAdmin, hasCustomerProfile, hasDesignerProfile}`, route-group-based
 context resolution, `middleware.ts` protection — all unchanged from Round 1.
@@ -460,7 +496,7 @@ flattened project columns.
 
 Phase 1's schema step now explicitly includes: the corrected `projects` table shape (§6.3), the
 finalized `*_images` child-table pattern with `file_id` (§11), the `verification_codes` table
-(§9a), and the `preferred_designer_id` verified-only constraint (§6.3) — all part of "build
+(§9a — *planned; never built*), and the `preferred_designer_id` verified-only constraint (§6.3) — all part of "build
 directly from §6" as already stated; no reordering of the 10 phases.
 
 ---
@@ -494,7 +530,7 @@ Round 1 left four open plus one small item. This round closes all five:
 | Image storage shape (array vs. child table) | **Closed — correction 2**: child tables, finalized, no array alternative. |
 | Payment provider / market | **Closed — correction 3**: Razorpay, India-first, behind `PaymentService`. |
 | Admin account model (flat vs. tiered) | **Closed — correction 4**: flat `is_admin`, no tiers. |
-| OTP delivery channel | **Closed — correction 5**: email only for MVP, schema allows SMS later. |
+| OTP delivery channel | **Closed — correction 5**: email only for MVP, schema allows SMS later. *(Moot as built: no OTP sign-in exists; see Current Authentication Implementation.)* |
 | Directed request to an unverified designer | **Closed — correction 6**: cannot be created; enforced at request-creation time. |
 
 **No blocking ambiguities remain.** The one thing worth naming going into implementation isn't an
