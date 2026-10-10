@@ -87,8 +87,9 @@ export default function AdminSettingsPage() {
             <div className="flex items-start gap-3 p-3 rounded bg-amber-500/10 border border-amber-500/20 mb-4">
               <ShieldAlert size={16} className="text-amber-400 shrink-0 mt-0.5" />
               <p className="text-xs text-amber-200/80">
-                Sign-in uses email OTP, so there is no password to change here. This section is a placeholder for future
-                security controls (e.g. session management, 2FA).
+                Admins sign in with email and password. Changing the password isn&apos;t available here yet — update it in the
+                Supabase dashboard (Authentication → Users). This section is a placeholder for future security controls
+                (e.g. session management, 2FA).
               </p>
             </div>
             <fieldset disabled className="bg-surface-lowest text-ink rounded-md p-5 flex flex-col gap-4 opacity-60">

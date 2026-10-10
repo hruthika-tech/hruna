@@ -30,6 +30,14 @@ function supabaseImageRemotePattern() {
 const supabasePattern = supabaseImageRemotePattern();
 
 const nextConfig = {
+  // Next 14.2's client router cache reuses a dynamic page's previously-fetched payload for 30s by
+  // default, so a designer who saved a banner/collection/About text in Manage Studio and then
+  // navigated (client-side) to My Studio or a /studio/[id] page they'd opened moments earlier saw
+  // the OLD content until a hard reload. 0 = always re-fetch dynamic pages on navigation (this is
+  // Next 15's default). Static pages are unaffected.
+  experimental: {
+    staleTimes: { dynamic: 0 },
+  },
   images: {
     remotePatterns: [
       { protocol: "https", hostname: "images.unsplash.com" },

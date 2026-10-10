@@ -304,7 +304,6 @@ export interface DesignerOnboardingProfile {
   // Step 1 — Account
   phone: string;
   emailVerified: boolean;
-  phoneVerified: boolean;
 
   // Step 2 — Professional profile + specializations
   roles: string[];

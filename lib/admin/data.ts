@@ -11,6 +11,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database, Tables } from "@/lib/supabase/types";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { STORAGE_BUCKETS } from "@/lib/supabase/storage";
+import { emailConfirmed } from "@/lib/designer/data";
 
 export {
   mapVerification,
@@ -58,6 +59,22 @@ export async function resolvePortfolioItemImageAsAdmin(supabase: Supa, fileId: s
   const { data, error } = await admin.storage.from(file.bucket_id).createSignedUrl(file.storage_path, 60 * 15);
   if (error || !data) return "";
   return data.signedUrl;
+}
+
+/* ------------------------------------------------------------------ */
+/* A designer's account email-verification state, as an ADMIN sees it. */
+/* Read from Supabase Auth (auth.users.email_confirmed_at) — the only  */
+/* trustworthy source — which needs the service-role Auth admin API.   */
+/* ------------------------------------------------------------------ */
+
+export async function getDesignerEmailVerifiedAsAdmin(supabase: Supa, designerId: string): Promise<boolean> {
+  const { data: profile } = await supabase.from("designer_profiles").select("user_id").eq("id", designerId).maybeSingle();
+  if (!profile) return false;
+
+  const admin = createAdminClient();
+  const { data, error } = await admin.auth.admin.getUserById(profile.user_id);
+  if (error || !data.user) return false;
+  return emailConfirmed(data.user);
 }
 
 /* ------------------------------------------------------------------ */

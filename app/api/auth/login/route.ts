@@ -40,7 +40,11 @@ export async function POST(request: Request) {
       throw error;
     }
 
-    return NextResponse.json({ status: "ok" });
+    // ADMIN always lands in the admin area, whatever `?next=` the login page carried (a public
+    // page like /discover wouldn't be caught by the middleware's admin redirect). Resolved from
+    // the same trusted is_admin() SQL helper as everywhere else, using the session just created.
+    const { data: isAdmin } = await supabase.rpc("is_admin");
+    return NextResponse.json({ status: "ok", redirectTo: isAdmin ? "/admin" : null });
   } catch (err) {
     return errorResponse(err, "api.auth.login");
   }

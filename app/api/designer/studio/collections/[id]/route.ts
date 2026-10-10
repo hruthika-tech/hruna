@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { requireDesigner } from "@/lib/supabase/authorization";
 import { errorResponse } from "@/lib/supabase/errors";
-import { mapCollection, resolveStudioImage } from "@/lib/designer/data";
+import { isOwnStudioImage, mapCollection, resolveStudioImage } from "@/lib/designer/data";
 import type { TablesUpdate } from "@/lib/supabase/types";
 
 export const dynamic = "force-dynamic";
@@ -16,11 +16,18 @@ export async function PATCH(request: Request, { params }: { params: { id: string
     if (typeof body?.name === "string" && body.name.trim()) patch.name = body.name.trim();
     if (typeof body?.category === "string") patch.category = body.category;
     if (typeof body?.description === "string") patch.description = body.description;
-    if (body && "coverImageFileId" in body) {
-      patch.cover_image_file_id = typeof body.coverImageFileId === "string" ? body.coverImageFileId : null;
-    }
 
     const supabase = createClient();
+    // The cover can be replaced, but not cleared — it's a required field. Collections created
+    // before covers existed simply keep a null cover until one is uploaded.
+    if (body && "coverImageFileId" in body) {
+      const coverImageFileId = typeof body.coverImageFileId === "string" ? body.coverImageFileId : "";
+      if (!coverImageFileId || !(await isOwnStudioImage(supabase, coverImageFileId, ctx.user.id))) {
+        return NextResponse.json({ status: "error", message: "That cover image couldn't be used. Please upload it again." }, { status: 400 });
+      }
+      patch.cover_image_file_id = coverImageFileId;
+    }
+
     const { data, error } = await supabase
       .from("collections")
       .update(patch)

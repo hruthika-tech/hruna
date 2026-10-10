@@ -6,12 +6,12 @@ import Link from "next/link";
 import { AuthShell } from "@/components/layout/AuthShell";
 import { Field, Input } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
-import { validatePassword } from "@/lib/auth/password";
+import { PASSWORD_HINT, validatePassword } from "@/lib/auth/password";
 
-// TEMPORARY DEVELOPMENT FLOW: collects Full Name + Email + Password + Confirm Password and signs
-// the account in immediately, with no email verification step — see app/api/auth/signup/route.ts's
-// file comment for exactly why and how to restore real verification later. Full name + email
-// validation and the duplicate-account check are unchanged from before.
+// Collects Full Name + Email + Password + Confirm Password, then posts to
+// app/api/auth/signup/route.ts, which calls Supabase's real signUp() — no session is created here;
+// the visitor lands on /verify-email and only gets a session once they click the confirmation link
+// Supabase emails them (app/auth/confirm/route.ts).
 export default function CreateAccountPage() {
   const router = useRouter();
   const [form, setForm] = useState({ name: "", email: "", password: "", confirmPassword: "" });
@@ -20,9 +20,9 @@ export default function CreateAccountPage() {
   const [loading, setLoading] = useState(false);
 
   // An already-authenticated visitor (e.g. an existing customer using "Become a Designer") skips
-  // straight to /choose-role — their email already has a password set. passwordSet is set to true
-  // by app/api/auth/signup/route.ts's signUp() call now, same as the real-verification flow's
-  // /api/auth/set-password does, so this check still behaves correctly unchanged.
+  // this form entirely — straight to /choose-role if they already have a password, or
+  // /setup-password if they have a confirmed session but never set one (matches
+  // app/setup-password/page.tsx's own guard and app/api/auth/session/route.ts's `passwordSet`).
   useEffect(() => {
     (async () => {
       try {
@@ -70,7 +70,7 @@ export default function CreateAccountPage() {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.message ?? "Something went wrong. Please try again.");
-      router.push("/choose-role");
+      router.push(`/verify-email?email=${encodeURIComponent(form.email)}`);
     } catch (err) {
       setErrors({ email: err instanceof Error ? err.message : "Something went wrong. Please try again." });
       setLoading(false);
@@ -90,7 +90,7 @@ export default function CreateAccountPage() {
         <Field label="Email address" htmlFor="email" required error={errors.email}>
           <Input id="email" type="email" value={form.email} onChange={(e) => update("email", e.target.value)} autoComplete="email" />
         </Field>
-        <Field label="Password" htmlFor="password" required error={errors.password} hint="At least 8 characters.">
+        <Field label="Password" htmlFor="password" required error={errors.password} hint={PASSWORD_HINT}>
           <Input
             id="password"
             type="password"

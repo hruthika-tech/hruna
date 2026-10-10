@@ -11,9 +11,11 @@ import "server-only";
  * this file never re-derives that logic in TypeScript, so it can't drift from what RLS actually
  * enforces.
  *
- * Every helper here uses lib/supabase/server.ts's request-scoped, cookie-authenticated client —
- * never lib/supabase/admin.ts. That's deliberate: resolving "who is this user and what can they
- * do" must happen AS that user, through RLS, not through a service-role bypass (§18).
+ * Every helper that resolves the CALLER's own role uses lib/supabase/server.ts's request-scoped,
+ * cookie-authenticated client — never lib/supabase/admin.ts. That's deliberate: resolving "who is
+ * this user and what can they do" must happen AS that user, through RLS, not through a
+ * service-role bypass (§18). The single exception is getAdminOwnedDesignerIds() at the bottom,
+ * which answers a read-only question about OTHER users that RLS hides (see its comment).
  *
  * Route Handlers / Server Actions / Server Components call requireX() and let AuthorizationError
  * propagate to lib/supabase/errors.ts's errorResponse(), which maps it to a 401/403 — so no
@@ -22,6 +24,7 @@ import "server-only";
 
 import type { User } from "@supabase/supabase-js";
 import { createClient } from "./server";
+import { createAdminClient } from "./admin";
 import { AuthorizationError } from "./errors";
 import type { Enums } from "./types";
 
@@ -94,18 +97,34 @@ export async function requireUser(): Promise<AuthContext> {
   return ctx;
 }
 
-/** Throws 401/403 unless the signed-in user has a customer profile. */
+/**
+ * ADMIN is a separate role, never combined with CUSTOMER or DESIGNER. An admin account acts only
+ * through the admin area (requireAdmin + its own routes), so even if an admin user somehow has a
+ * customer_profiles/designer_profiles row (e.g. created before this guard existed), the customer/
+ * designer feature routes refuse it instead of letting the admin act as — and edit — that profile.
+ */
+export const ADMIN_ROLE_SEPARATION_MESSAGE =
+  "Admin accounts can't use customer or designer features. Please use a separate account for that.";
+
+export function assertNotAdmin(ctx: AuthContext): void {
+  if (ctx.isAdmin) throw new AuthorizationError(ADMIN_ROLE_SEPARATION_MESSAGE, 403);
+}
+
+/** Throws 401/403 unless the signed-in user has a customer profile (and is not an admin). */
 export async function requireCustomer(): Promise<AuthContext & { customerId: string }> {
   const ctx = await requireUser();
+  assertNotAdmin(ctx);
   if (!ctx.customerId) {
     throw new AuthorizationError("A customer profile is required for this action.", 403);
   }
   return ctx as AuthContext & { customerId: string };
 }
 
-/** Throws 401/403 unless the signed-in user has a designer profile (any verification state). */
+/** Throws 401/403 unless the signed-in user has a designer profile (any verification state) and
+ *  is not an admin. */
 export async function requireDesigner(): Promise<AuthContext & { designerId: string }> {
   const ctx = await requireUser();
+  assertNotAdmin(ctx);
   if (!ctx.designerId) {
     throw new AuthorizationError("A designer profile is required for this action.", 403);
   }
@@ -140,4 +159,30 @@ export async function requireAdmin(): Promise<AuthContext> {
     throw new AuthorizationError("Admin access is required.", 403);
   }
   return ctx;
+}
+
+/**
+ * Of the given designer_profiles ids, the ones owned by an ADMIN account. An admin is never also a
+ * public designer (see assertNotAdmin), so these profiles — e.g. one an admin created accidentally
+ * before that rule existed — must never be shown or reachable on any public surface: the Studio
+ * page, Discover/Home listings, dress/collection detail, saved items, conversations, requests.
+ *
+ * The one helper here that uses the service-role client, deliberately: it answers a question about
+ * OTHER users' role that users_select_self_or_admin RLS hides from a customer/anonymous caller.
+ * It reads only users.is_admin (the same column is_admin() checks) and returns nothing but ids.
+ */
+export async function getAdminOwnedDesignerIds(designerIds: string[]): Promise<Set<string>> {
+  const ids = [...new Set(designerIds)].filter(Boolean);
+  if (ids.length === 0) return new Set();
+  const { data, error } = await createAdminClient()
+    .from("designer_profiles")
+    .select("id, users!inner(is_admin)")
+    .in("id", ids)
+    .eq("users.is_admin", true);
+  if (error) throw error;
+  return new Set((data ?? []).map((d) => d.id));
+}
+
+export async function isAdminOwnedDesigner(designerId: string): Promise<boolean> {
+  return (await getAdminOwnedDesignerIds([designerId])).has(designerId);
 }

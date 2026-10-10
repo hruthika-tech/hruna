@@ -8,7 +8,7 @@
 
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import { requireCustomer } from "@/lib/supabase/authorization";
+import { isAdminOwnedDesigner, requireCustomer } from "@/lib/supabase/authorization";
 import { errorResponse } from "@/lib/supabase/errors";
 import { mapSavedItem } from "@/lib/customer/data";
 import type { TablesInsert } from "@/lib/supabase/types";
@@ -56,6 +56,19 @@ export async function POST(request: Request) {
 
     const column = TARGET_COLUMN[itemType];
     const supabase = createClient();
+
+    // Designers, dresses and collections belonging to an admin-owned designer profile aren't
+    // public, so they can't be saved either.
+    if (itemType === "designer" || itemType === "dress" || itemType === "collection") {
+      let designerId: string | null = itemId;
+      if (itemType !== "designer") {
+        const { data: item } = await supabase.from(itemType === "dress" ? "dresses" : "collections").select("designer_id").eq("id", itemId).maybeSingle();
+        designerId = item?.designer_id ?? null;
+      }
+      if (designerId && (await isAdminOwnedDesigner(designerId))) {
+        return NextResponse.json({ status: "error", message: "Item not found." }, { status: 404 });
+      }
+    }
 
     const { data: existing, error: findError } = await supabase
       .from("customer_saved_items")

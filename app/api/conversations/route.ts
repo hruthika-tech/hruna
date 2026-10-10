@@ -8,7 +8,7 @@
 
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import { requireCustomer } from "@/lib/supabase/authorization";
+import { isAdminOwnedDesigner, requireCustomer } from "@/lib/supabase/authorization";
 import { errorResponse, isPostgrestError } from "@/lib/supabase/errors";
 import { getDesignerSummaries } from "@/lib/customer/data";
 
@@ -51,6 +51,9 @@ export async function POST(request: Request) {
     const designerId = typeof body?.designerId === "string" ? body.designerId : "";
     if (!designerId) {
       return NextResponse.json({ status: "error", message: "designerId is required." }, { status: 400 });
+    }
+    if (await isAdminOwnedDesigner(designerId)) {
+      return NextResponse.json({ status: "error", message: "Designer not found." }, { status: 404 });
     }
 
     const supabase = createClient();

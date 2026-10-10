@@ -10,7 +10,7 @@
 
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import { requireUser } from "@/lib/supabase/authorization";
+import { assertNotAdmin, requireUser } from "@/lib/supabase/authorization";
 import { errorResponse } from "@/lib/supabase/errors";
 import { getPublicFileUrl, deleteFileIfOwnedBy } from "@/lib/supabase/storage";
 import type { TablesInsert, TablesUpdate } from "@/lib/supabase/types";
@@ -62,6 +62,7 @@ async function loadOwnProfile(supabase: ReturnType<typeof createClient>, userId:
 export async function GET() {
   try {
     const ctx = await requireUser();
+    assertNotAdmin(ctx);
     const supabase = createClient();
     const profile = await loadOwnProfile(supabase, ctx.user.id);
     return NextResponse.json({ status: "ok", customerProfile: profile });
@@ -73,6 +74,7 @@ export async function GET() {
 export async function POST(request: Request) {
   try {
     const ctx = await requireUser();
+    assertNotAdmin(ctx);
     const body = await request.json().catch(() => null);
     const name = typeof body?.name === "string" ? body.name.trim() : "";
     if (!name) {
@@ -124,6 +126,7 @@ export async function POST(request: Request) {
 export async function PATCH(request: Request) {
   try {
     const ctx = await requireUser();
+    assertNotAdmin(ctx);
     const body = await request.json().catch(() => null);
 
     const patch: TablesUpdate<"customer_profiles"> = {};

@@ -45,7 +45,7 @@ export function Modal({
           className
         )}
       >
-        <div className="flex items-center justify-between px-6 py-5 border-b border-outline-variant sticky top-0 bg-surface-lowest">
+        <div className="flex items-center justify-between px-6 py-5 border-b border-outline-variant sticky top-0 z-10 bg-surface-lowest">
           <h3 className="text-headline-sm">{title}</h3>
           <button
             onClick={onClose}

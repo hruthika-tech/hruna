@@ -10,6 +10,7 @@ import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { requireDesigner } from "@/lib/supabase/authorization";
 import { errorResponse } from "@/lib/supabase/errors";
+import { emailConfirmed } from "@/lib/designer/data";
 import type { TablesUpdate } from "@/lib/supabase/types";
 
 export const dynamic = "force-dynamic";
@@ -18,6 +19,15 @@ export async function POST() {
   try {
     const ctx = await requireDesigner();
     const supabase = createClient();
+
+    // Account-level email verification (Supabase Auth's signup confirmation link) — the same
+    // requirement as customer signup, and separate from the identity/portfolio/admin review below.
+    if (!emailConfirmed(ctx.user)) {
+      return NextResponse.json(
+        { status: "error", message: "Please verify your email address using the link we sent you before submitting." },
+        { status: 403 }
+      );
+    }
 
     const [{ data: onboarding }, { count: itemCount }, { data: verification }] = await Promise.all([
       supabase.from("designer_onboarding").select("*").eq("designer_id", ctx.designerId).single(),

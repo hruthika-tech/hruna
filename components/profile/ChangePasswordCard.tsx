@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { Field, Input } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
-import { validatePasswordConfirmation } from "@/lib/auth/password";
+import { PASSWORD_HINT, validatePasswordConfirmation } from "@/lib/auth/password";
 import { useToast } from "@/hooks/use-toast";
 
 // Settings > Security's real Change Password card — replaces the old stale "HRUNA uses
@@ -63,7 +63,7 @@ export function ChangePasswordCard() {
             autoComplete="current-password"
           />
         </Field>
-        <Field label="New password" htmlFor="newPassword" required error={errors.newPassword} hint="At least 8 characters.">
+        <Field label="New password" htmlFor="newPassword" required error={errors.newPassword} hint={PASSWORD_HINT}>
           <Input
             id="newPassword"
             type="password"

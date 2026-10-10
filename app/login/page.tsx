@@ -6,6 +6,7 @@ import Link from "next/link";
 import { AuthShell } from "@/components/layout/AuthShell";
 import { Field, Input } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
+import { safeNextPath } from "@/lib/auth/safe-redirect";
 
 // Password sign-in, via app/api/auth/login/route.ts's supabase.auth.signInWithPassword() call —
 // replaces the old email-OTP request+verify flow. `?next=` is preserved from before (set by
@@ -14,7 +15,8 @@ import { Button } from "@/components/ui/Button";
 function LoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const next = searchParams.get("next") ?? "/home";
+  // Only same-site relative paths — anything else (absolute URLs, //host, /\host…) becomes /home.
+  const next = safeNextPath(searchParams.get("next"));
   const [form, setForm] = useState({ email: "", password: "" });
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
@@ -37,7 +39,7 @@ function LoginForm() {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.message ?? "Something went wrong. Please try again.");
-      router.push(next);
+      router.push(data.redirectTo ?? next);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Something went wrong. Please try again.");
       setLoading(false);
@@ -48,6 +50,12 @@ function LoginForm() {
     <>
       <p className="text-label-md text-outline mb-2">WELCOME BACK</p>
       <h1 className="text-headline-md mb-8">Sign in to HRUNA</h1>
+      {/* Set by app/reset-password/ResetPasswordFlow.tsx after a successful password reset. */}
+      {searchParams.get("reset") === "success" && (
+        <p className="text-sm text-primary -mt-4 mb-6" role="status">
+          Your password has been updated. Sign in with your new password.
+        </p>
+      )}
       <form onSubmit={onSubmit} className="flex flex-col gap-5" noValidate>
         <Field label="Email address" htmlFor="email" required error={error && !form.password ? error : undefined}>
           <Input

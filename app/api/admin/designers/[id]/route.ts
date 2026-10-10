@@ -14,6 +14,7 @@ import {
   mapPortfolioItem,
   mapCredential,
   resolvePortfolioItemImageAsAdmin,
+  getDesignerEmailVerifiedAsAdmin,
   getDesignerSummaries,
 } from "@/lib/admin/data";
 
@@ -48,9 +49,12 @@ export async function GET(_request: Request, { params }: { params: { id: string 
       return NextResponse.json({ status: "error", message: "Designer not found." }, { status: 404 });
     }
 
-    const items = await Promise.all(
-      (portfolioItems ?? []).map(async (p) => mapPortfolioItem(p, await resolvePortfolioItemImageAsAdmin(supabase, p.file_id)))
-    );
+    const [items, emailVerified] = await Promise.all([
+      Promise.all(
+        (portfolioItems ?? []).map(async (p) => mapPortfolioItem(p, await resolvePortfolioItemImageAsAdmin(supabase, p.file_id)))
+      ),
+      getDesignerEmailVerifiedAsAdmin(supabase, params.id),
+    ]);
 
     // admin_id is a users.id — resolve display names for the audit log's "by <admin>" line.
     const adminIds = [...new Set((auditLog ?? []).map((a) => a.admin_id))];
@@ -62,7 +66,7 @@ export async function GET(_request: Request, { params }: { params: { id: string 
     return NextResponse.json({
       status: "ok",
       designer,
-      onboarding: { ...mapOnboarding(onboarding), portfolioItems: items, credentials: (credentials ?? []).map(mapCredential) },
+      onboarding: { ...mapOnboarding(onboarding, emailVerified), portfolioItems: items, credentials: (credentials ?? []).map(mapCredential) },
       verification: mapVerification(verification),
       auditLog: (auditLog ?? []).map((a) => ({
         id: a.id,

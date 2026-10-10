@@ -21,6 +21,7 @@ import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/supabase/types";
 import { mapDesignerProfile, mapDress, mapCollection, resolveStudioImage, resolveDressImages } from "@/lib/designer/data";
+import { getAdminOwnedDesignerIds, isAdminOwnedDesigner } from "@/lib/supabase/authorization";
 import type { Designer } from "@/types";
 
 type Supa = SupabaseClient<Database>;
@@ -39,9 +40,19 @@ async function mapDesignerRow(supabase: Supa, designer: any, isApproved: boolean
   return mapDesignerProfile(designer, displayName, avatar, banner, isApproved) as unknown as Designer;
 }
 
+// Admin-owned designer profiles are never part of any public surface (see getAdminOwnedDesignerIds),
+// even if one were ever approved by mistake.
 async function getApprovedIds(supabase: Supa): Promise<string[]> {
   const { data } = await supabase.from("designer_public_profiles").select("id").eq("is_approved", true);
-  return (data ?? []).map((d) => d.id).filter((id): id is string => !!id);
+  const ids = (data ?? []).map((d) => d.id).filter((id): id is string => !!id);
+  const adminOwned = await getAdminOwnedDesignerIds(ids);
+  return ids.filter((id) => !adminOwned.has(id));
+}
+
+/** Drops rows whose designer profile is admin-owned. */
+async function withoutAdminOwned<T>(rows: T[], designerIdOf: (row: T) => string): Promise<T[]> {
+  const adminOwned = await getAdminOwnedDesignerIds(rows.map(designerIdOf));
+  return rows.filter((row) => !adminOwned.has(designerIdOf(row)));
 }
 
 /** Designers by exact id, regardless of approval status — powers the Saved Items page, which
@@ -51,30 +62,33 @@ async function getApprovedIds(supabase: Supa): Promise<string[]> {
 export async function listDesignersByIds(supabase: Supa, ids: string[]) {
   const uniqueIds = [...new Set(ids)].filter(Boolean);
   if (uniqueIds.length === 0) return [];
-  const { data: designers, error } = await supabase.from("designer_profiles").select("*, users(display_name)").in("id", uniqueIds);
+  const { data: designerRows, error } = await supabase.from("designer_profiles").select("*, users(display_name)").in("id", uniqueIds);
   if (error) throw error;
+  const designers = await withoutAdminOwned(designerRows ?? [], (d) => d.id);
   const { data: approvals } = await supabase.from("designer_public_profiles").select("id, is_approved").in("id", uniqueIds);
   const approvedById = new Map((approvals ?? []).map((a) => [a.id, !!a.is_approved]));
-  return Promise.all((designers ?? []).map((d) => mapDesignerRow(supabase, d, approvedById.get(d.id) ?? false)));
+  return Promise.all(designers.map((d) => mapDesignerRow(supabase, d, approvedById.get(d.id) ?? false)));
 }
 
 /** Dresses by exact id — powers the Saved Items page. */
 export async function listDressesByIds(supabase: Supa, ids: string[]) {
   const uniqueIds = [...new Set(ids)].filter(Boolean);
   if (uniqueIds.length === 0) return [];
-  const { data: dresses, error } = await supabase.from("dresses").select("*").in("id", uniqueIds);
+  const { data: dressRows, error } = await supabase.from("dresses").select("*").in("id", uniqueIds);
   if (error) throw error;
-  return Promise.all((dresses ?? []).map(async (d) => mapDress(d, await resolveDressImages(supabase, d.id))));
+  const dresses = await withoutAdminOwned(dressRows ?? [], (d) => d.designer_id);
+  return Promise.all(dresses.map(async (d) => mapDress(d, await resolveDressImages(supabase, d.id))));
 }
 
 /** Collections by exact id — powers the Saved Items page. */
 export async function listCollectionsByIds(supabase: Supa, ids: string[]) {
   const uniqueIds = [...new Set(ids)].filter(Boolean);
   if (uniqueIds.length === 0) return [];
-  const { data: collections, error } = await supabase.from("collections").select("*").in("id", uniqueIds);
+  const { data: collectionRows, error } = await supabase.from("collections").select("*").in("id", uniqueIds);
   if (error) throw error;
+  const collections = await withoutAdminOwned(collectionRows ?? [], (c) => c.designer_id);
   return Promise.all(
-    (collections ?? []).map(async (c) => {
+    collections.map(async (c) => {
       const cover = await resolveStudioImage(supabase, c.cover_image_file_id);
       return mapCollection(c, cover, []);
     })
@@ -135,7 +149,7 @@ export async function listCollections(supabase: Supa, limit = 6) {
 export async function getDressDetail(supabase: Supa, dressId: string) {
   const { data: dressRow, error } = await supabase.from("dresses").select("*").eq("id", dressId).maybeSingle();
   if (error) throw error;
-  if (!dressRow) return null;
+  if (!dressRow || (await isAdminOwnedDesigner(dressRow.designer_id))) return null;
 
   const [images, { data: designerRow }, { data: approval }] = await Promise.all([
     resolveDressImages(supabase, dressId),
@@ -167,7 +181,7 @@ export async function getPlatformStats(supabase: Supa) {
 export async function getCollectionDetail(supabase: Supa, collectionId: string) {
   const { data: collectionRow, error } = await supabase.from("collections").select("*").eq("id", collectionId).maybeSingle();
   if (error) throw error;
-  if (!collectionRow) return null;
+  if (!collectionRow || (await isAdminOwnedDesigner(collectionRow.designer_id))) return null;
 
   const [cover, { data: dressRows }, { data: designerRow }, { data: approval }] = await Promise.all([
     resolveStudioImage(supabase, collectionRow.cover_image_file_id),

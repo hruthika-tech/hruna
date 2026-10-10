@@ -9,9 +9,9 @@ import "server-only";
  * not a parallel "designer's view of a request" model.
  */
 
-import type { SupabaseClient } from "@supabase/supabase-js";
+import type { SupabaseClient, User } from "@supabase/supabase-js";
 import type { Database, Tables } from "@/lib/supabase/types";
-import { createSignedFileUrl, getPublicFileUrl, type StorageBucketKey } from "@/lib/supabase/storage";
+import { STORAGE_BUCKETS, createSignedFileUrl, getPublicFileUrl, type StorageBucketKey } from "@/lib/supabase/storage";
 import type { ResolvedImage } from "@/lib/customer/data";
 
 export {
@@ -100,6 +100,16 @@ async function resolveStudioImage(
   const { data } = await supabase.from("files").select("storage_path").eq("id", fileId).maybeSingle();
   if (!data) return "";
   return getPublicFileUrl(supabase, bucket, data.storage_path);
+}
+
+/**
+ * True only if `fileId` is an upload the given user owns in the public studio-images bucket.
+ * Studio content resolves images as PUBLIC urls (resolveStudioImage above), so linking a file
+ * from any other bucket — or someone else's file — must be refused before it's saved.
+ */
+export async function isOwnStudioImage(supabase: Supa, fileId: string, userId: string): Promise<boolean> {
+  const { data } = await supabase.from("files").select("owner_id, bucket_id").eq("id", fileId).maybeSingle();
+  return !!data && data.owner_id === userId && data.bucket_id === STORAGE_BUCKETS.studioImages.id;
 }
 
 async function resolveStudioImagesOrderedFull(
@@ -263,12 +273,25 @@ export function mapMeetEntry(row: Tables<"meet_the_designer_entries">, image: st
 /* Onboarding + portfolio + credentials -> frontend shapes.            */
 /* ------------------------------------------------------------------ */
 
-export function mapOnboarding(row: Tables<"designer_onboarding">) {
+/** True once Supabase Auth has confirmed this user's email (the signup confirmation link). */
+export function emailConfirmed(user: Pick<User, "email_confirmed_at"> | null | undefined): boolean {
+  return !!user?.email_confirmed_at;
+}
+
+/**
+ * `emailVerified` is passed in, not read from designer_onboarding.email_verified: that column was
+ * never written by anything, so it always read false. The source of truth is Supabase Auth's own
+ * auth.users.email_confirmed_at — set only when the signup confirmation link is clicked
+ * (app/auth/confirm/route.ts), the same check customer signup relies on. See emailConfirmed().
+ *
+ * designer_onboarding.phone_verified is deliberately NOT surfaced: there is no SMS verification in
+ * V1, so the phone is an optional, unverified contact detail only.
+ */
+export function mapOnboarding(row: Tables<"designer_onboarding">, emailVerified: boolean) {
   return {
     designerId: row.designer_id,
     phone: row.phone ?? "",
-    emailVerified: row.email_verified,
-    phoneVerified: row.phone_verified,
+    emailVerified,
     roles: row.roles,
     otherRoleDescription: row.other_role_description ?? undefined,
     specializationCategories: row.specialization_categories,

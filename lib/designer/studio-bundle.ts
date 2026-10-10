@@ -13,6 +13,7 @@ import "server-only";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/supabase/types";
+import { isAdminOwnedDesigner } from "@/lib/supabase/authorization";
 import {
   mapDesignerProfile,
   mapCollection,
@@ -33,6 +34,9 @@ export async function getStudioBundle(supabase: SupabaseClient<Database>, design
     .maybeSingle();
   if (error) throw error;
   if (!designer) return null;
+  // A designer profile owned by an ADMIN account is never a public studio — treat it as not found
+  // (404 on /studio/[id] and /api/studio/[id]) rather than exposing its content.
+  if (await isAdminOwnedDesigner(designer.id)) return null;
 
   const [
     { data: approval },

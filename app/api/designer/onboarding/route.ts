@@ -14,12 +14,13 @@ import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { requireDesigner } from "@/lib/supabase/authorization";
 import { errorResponse } from "@/lib/supabase/errors";
-import { mapOnboarding, mapPortfolioItem, mapCredential, mapVerification, resolvePortfolioItemImage } from "@/lib/designer/data";
+import { emailConfirmed, mapOnboarding, mapPortfolioItem, mapCredential, mapVerification, resolvePortfolioItemImage } from "@/lib/designer/data";
 import type { TablesUpdate } from "@/lib/supabase/types";
+import type { User } from "@supabase/supabase-js";
 
 export const dynamic = "force-dynamic";
 
-async function loadBundle(supabase: ReturnType<typeof createClient>, designerId: string) {
+async function loadBundle(supabase: ReturnType<typeof createClient>, designerId: string, user: User) {
   const [{ data: onboarding }, { data: portfolioItems }, { data: credentials }, { data: verification }] = await Promise.all([
     supabase.from("designer_onboarding").select("*").eq("designer_id", designerId).single(),
     supabase.from("designer_portfolio_items").select("*").eq("designer_id", designerId).order("created_at", { ascending: true }),
@@ -32,7 +33,7 @@ async function loadBundle(supabase: ReturnType<typeof createClient>, designerId:
   );
 
   return {
-    onboarding: onboarding ? { ...mapOnboarding(onboarding), portfolioItems: items, credentials: (credentials ?? []).map(mapCredential) } : null,
+    onboarding: onboarding ? { ...mapOnboarding(onboarding, emailConfirmed(user)), portfolioItems: items, credentials: (credentials ?? []).map(mapCredential) } : null,
     verification: verification ? mapVerification(verification) : null,
   };
 }
@@ -41,7 +42,7 @@ export async function GET() {
   try {
     const ctx = await requireDesigner();
     const supabase = createClient();
-    const bundle = await loadBundle(supabase, ctx.designerId);
+    const bundle = await loadBundle(supabase, ctx.designerId, ctx.user);
     return NextResponse.json({ status: "ok", ...bundle });
   } catch (err) {
     return errorResponse(err, "api.designer.onboarding.get");
@@ -76,12 +77,13 @@ export async function PATCH(request: Request) {
     if (Array.isArray(body?.specializationCrafts)) patch.specialization_crafts = body.specializationCrafts;
     if (Array.isArray(body?.serviceLocations)) patch.service_locations = body.serviceLocations;
     if (typeof body?.portfolioOwnershipAccepted === "boolean") patch.portfolio_ownership_accepted = body.portfolioOwnershipAccepted;
-    if (typeof body?.phoneVerified === "boolean") patch.phone_verified = body.phoneVerified;
+    // No phoneVerified/emailVerified input is accepted: phone is an optional, unverified contact
+    // detail in V1 (no SMS verification), and email status comes only from Supabase Auth.
 
     const { error } = await supabase.from("designer_onboarding").update(patch).eq("designer_id", ctx.designerId);
     if (error) throw error;
 
-    const bundle = await loadBundle(supabase, ctx.designerId);
+    const bundle = await loadBundle(supabase, ctx.designerId, ctx.user);
     return NextResponse.json({ status: "ok", ...bundle });
   } catch (err) {
     return errorResponse(err, "api.designer.onboarding.patch");

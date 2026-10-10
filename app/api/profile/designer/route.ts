@@ -8,7 +8,7 @@
 
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import { requireUser } from "@/lib/supabase/authorization";
+import { assertNotAdmin, requireUser } from "@/lib/supabase/authorization";
 import { errorResponse } from "@/lib/supabase/errors";
 import type { TablesInsert } from "@/lib/supabase/types";
 
@@ -19,6 +19,8 @@ const DESIGNER_TYPES = ["Designer", "Boutique", "Tailor"] as const;
 export async function POST(request: Request) {
   try {
     const ctx = await requireUser();
+    // An admin account must never become a designer too (role separation — see assertNotAdmin).
+    assertNotAdmin(ctx);
     const body = await request.json().catch(() => null);
     const studioName = typeof body?.studioName === "string" ? body.studioName.trim() : "";
     const type = DESIGNER_TYPES.includes(body?.type) ? body.type : "Designer";

@@ -15,8 +15,9 @@
  * whether a customer_profiles/designer_profiles row exists (see lib/auth/routes.ts's scope note),
  * or gate anything on approved-designer status (that's an ACTION-level check via
  * requireApprovedDesigner(), not a page-level one — no current DESIGNER route in §15 requires it
- * just to view the page). "admin" is the one level checked against real, trusted database state
- * here, via the same is_admin() SQL function the RLS policies use — never a client-supplied value.
+ * just to view the page). Admin status is checked against real, trusted database state here, via
+ * the same is_admin() SQL function the RLS policies use — never a client-supplied value — both to
+ * gate /admin and to keep admin accounts out of every customer/designer/onboarding page.
  */
 
 import { createServerClient } from "@supabase/ssr";
@@ -71,14 +72,21 @@ export async function updateSession(request: NextRequest) {
     return withCookies(supabaseResponse, NextResponse.redirect(loginUrl));
   }
 
+  // Admin status is resolved from public.users.is_admin via the same trusted SQL helper RLS itself
+  // uses (see supabase/migrations/20260829180013_rls.sql), never from anything the client sent.
+  const { data: isAdmin } = await supabase.rpc("is_admin");
+
   if (level === "admin") {
-    // The ONLY route level that needs a real database lookup beyond "is there a session" — admin
-    // status is resolved from public.users.is_admin via the same trusted SQL helper RLS itself
-    // uses (see supabase/migrations/20260829180013_rls.sql), never from anything the client sent.
-    const { data: isAdmin } = await supabase.rpc("is_admin");
     if (!isAdmin) {
       return withCookies(supabaseResponse, NextResponse.redirect(new URL("/home", request.url)));
     }
+  } else if (isAdmin) {
+    // ADMIN is its own role, never also CUSTOMER or DESIGNER: an admin account is kept out of the
+    // customer/designer areas AND the role-selection/onboarding pages (/choose-role,
+    // /designer-onboarding, ...), which is exactly how an admin previously ended up with a
+    // designer profile of its own. The API routes enforce the same rule (assertNotAdmin in
+    // lib/supabase/authorization.ts); this just sends the admin somewhere useful instead.
+    return withCookies(supabaseResponse, NextResponse.redirect(new URL("/admin", request.url)));
   }
 
   // "authenticated" / "customer" / "designer" — a valid session is all this phase requires at the

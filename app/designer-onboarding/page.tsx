@@ -62,7 +62,7 @@ function MultiSelectChips({ options, selected, onToggle }: { options: string[]; 
 
 interface PortfolioItem { id: string; image: string; title: string; category: string; description: string; year?: string }
 interface OnboardingDraft {
-  phone: string; phoneVerified: boolean; roles: string[]; otherRoleDescription?: string;
+  phone: string; emailVerified: boolean; roles: string[]; otherRoleDescription?: string;
   specializationCategories: string[]; specializationCrafts: string[]; experienceLevel: string;
   learningBackground: string; experienceDescription: string; portfolioOwnershipAccepted: boolean;
   dateOfBirth: string; studioName: string; city: string; area: string; serviceLocations: string[];
@@ -90,9 +90,6 @@ export default function DesignerOnboardingPage() {
   const [avatar, setAvatar] = useState<UploadedImage | null>(null);
   const [avatarUploading, setAvatarUploading] = useState(false);
   const [phone, setPhone] = useState("");
-  const [otpDigits, setOtpDigits] = useState(["", "", "", ""]);
-  const [otpSent, setOtpSent] = useState(false);
-  const [otpError, setOtpError] = useState("");
 
   const [roles, setRoles] = useState<string[]>([]);
   const [otherRoleDescription, setOtherRoleDescription] = useState("");
@@ -218,6 +215,7 @@ export default function DesignerOnboardingPage() {
         if (Object.keys(patch).length > 0) {
           await fetch("/api/designer/profile", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(patch) });
         }
+        if (phone.trim() !== onboarding.phone) await patchOnboarding({ phone: phone.trim() });
       } else if (step === 1) {
         await patchOnboarding({
           roles, otherRoleDescription: roles.includes("Other") ? otherRoleDescription : undefined,
@@ -238,7 +236,7 @@ export default function DesignerOnboardingPage() {
   };
 
   const canContinue = (): boolean => {
-    if (step === 0) return name.trim().length > 0 && onboarding.phoneVerified;
+    if (step === 0) return name.trim().length > 0;
     if (step === 1) return roles.length > 0 && (!roles.includes("Other") || otherRoleDescription.trim().length > 0) && (specCategories.length > 0 || specCrafts.length > 0);
     if (step === 2) return experienceLevel !== "" && learningBackground !== "" && experienceDescription.trim().length >= 20;
     if (step === 3) return onboarding.portfolioItems.length >= 3 && ownershipAccepted;
@@ -250,24 +248,6 @@ export default function DesignerOnboardingPage() {
   const next = async () => {
     await persistCurrentStep();
     if (step < STEPS.length - 1) setStep(step + 1);
-  };
-
-  // Phone verification stays a client-side simulation — no SMS provider is part of this
-  // architecture (Phase 3 explicitly ruled that out) — but the RESULT is persisted for real.
-  const sendOtp = async () => {
-    if (!phone.trim()) return;
-    await patchOnboarding({ phone });
-    setOtpSent(true);
-    setOtpError("");
-  };
-
-  const verifyOtp = async () => {
-    if (otpDigits.join("") === "1234") {
-      await patchOnboarding({ phoneVerified: true });
-      setOtpError("");
-    } else {
-      setOtpError("That code isn't right. For this demo, use 1234.");
-    }
   };
 
   const handleAvatarChange = async (files: FileList | null) => {
@@ -402,39 +382,15 @@ export default function DesignerOnboardingPage() {
               <Field label="Full name" htmlFor="name" required>
                 <Input id="name" value={name} onChange={(e) => setName(e.target.value)} />
               </Field>
-              <p className="text-xs text-outline -mt-3">Your email is already verified from account creation.</p>
+              {onboarding.emailVerified ? (
+                <p className="text-sm text-emerald-700 flex items-center gap-1.5 -mt-3"><CheckCircle2 size={16} /> Email verified</p>
+              ) : (
+                <p className="text-xs text-error -mt-3">Your email isn&apos;t verified yet. Please click the link we sent to your inbox before submitting.</p>
+              )}
 
-              <Field label="Phone number" htmlFor="phone" required>
-                <div className="flex gap-2">
-                  <Input id="phone" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="+91 90000 00000" disabled={onboarding.phoneVerified} />
-                  {!onboarding.phoneVerified && <Button type="button" variant="secondary" onClick={sendOtp}>{otpSent ? "Resend" : "Send OTP"}</Button>}
-                </div>
+              <Field label="Phone number (optional)" htmlFor="phone" hint="So the HRUNA team can reach you if needed. Never shown on your public profile.">
+                <Input id="phone" type="tel" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="+91 90000 00000" autoComplete="tel" />
               </Field>
-
-              {onboarding.phoneVerified ? (
-                <p className="text-sm text-emerald-700 flex items-center gap-1.5"><CheckCircle2 size={16} /> Phone Verified</p>
-              ) : otpSent ? (
-                <div className="flex flex-col gap-3">
-                  <p className="text-xs text-outline">Enter the 4-digit code we sent. For this demo, use <span className="font-mono">1234</span>.</p>
-                  <div className="flex gap-3">
-                    {otpDigits.map((d, i) => (
-                      <input
-                        key={i}
-                        value={d}
-                        onChange={(e) => {
-                          const v = e.target.value.replace(/\D/g, "").slice(0, 1);
-                          setOtpDigits((prev) => prev.map((x, idx) => (idx === i ? v : x)));
-                        }}
-                        maxLength={1}
-                        inputMode="numeric"
-                        className="w-12 h-12 text-center text-lg rounded bg-surface-low border border-outline-variant focus:border-primary"
-                      />
-                    ))}
-                  </div>
-                  {otpError && <p className="text-xs text-error">{otpError}</p>}
-                  <Button type="button" size="sm" className="w-fit" onClick={verifyOtp}>Verify Phone</Button>
-                </div>
-              ) : null}
             </div>
           )}
 
@@ -635,7 +591,8 @@ export default function DesignerOnboardingPage() {
 
               <ReviewSection title="ACCOUNT" onEdit={() => setStep(0)}>
                 <ReviewRow label="Name" value={name} />
-                <ReviewRow label="Phone" value={`${phone} ${onboarding.phoneVerified ? "(Verified ✓)" : ""}`} />
+                <ReviewRow label="Email" value={onboarding.emailVerified ? "Verified ✓" : "Not verified"} />
+                <ReviewRow label="Phone" value={phone.trim() || "—"} />
               </ReviewSection>
 
               <ReviewSection title="PROFESSIONAL" onEdit={() => setStep(1)}>

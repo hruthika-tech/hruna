@@ -162,7 +162,7 @@ site_url = "http://127.0.0.1:3000"
 # Wildcarded (and http, matching site_url above — this was previously https, a scheme mismatch that
 # would have silently rejected every local redirect) so /auth/confirm (a path, not just the bare
 # origin) is actually allow-listed: Supabase validates the full redirect URL against this list.
-additional_redirect_urls = ["http://127.0.0.1:3000/**"]
+additional_redirect_urls = ["http://127.0.0.1:3000/**", "http://localhost:3000/**"]
 # How long tokens are valid for, in seconds. Defaults to 3600 (1 hour), maximum 604,800 (1 week).
 jwt_expiry = 3600
 # JWT issuer URL. If not set, defaults to auth.external_url.

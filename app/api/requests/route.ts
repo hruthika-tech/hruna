@@ -7,8 +7,9 @@
 
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import { requireCustomer } from "@/lib/supabase/authorization";
+import { isAdminOwnedDesigner, requireCustomer } from "@/lib/supabase/authorization";
 import { errorResponse } from "@/lib/supabase/errors";
+import { areFilesOwnedInBucket } from "@/lib/supabase/storage";
 import { mapRequest, resolveRequestImages } from "@/lib/customer/data";
 import type { TablesInsert } from "@/lib/supabase/types";
 
@@ -50,10 +51,26 @@ export async function POST(request: Request) {
         { status: 400 }
       );
     }
+    if (typeof body?.preferredDesignerId === "string" && (await isAdminOwnedDesigner(body.preferredDesignerId))) {
+      return NextResponse.json({ status: "error", message: "Designer not found." }, { status: 404 });
+    }
 
     const imageFileIds: string[] = Array.isArray(body?.imageFileIds)
-      ? body.imageFileIds.filter((id: unknown): id is string => typeof id === "string")
+      ? [...new Set(body.imageFileIds.filter((id: unknown): id is string => typeof id === "string"))] as string[]
       : [];
+
+    const supabase = createClient();
+    // Every image must be the caller's own upload in request-images — checked BEFORE anything is
+    // created, so one bad id rejects the whole request (no request, no image links). request_images'
+    // RLS only checks the parent request, not the file, so this is the gate that stops a customer
+    // linking (and thereby gaining read access to) someone else's private file. One generic message
+    // for every failure — it never says whether a foreign file exists.
+    if (!(await areFilesOwnedInBucket(supabase, imageFileIds, ctx.user.id, "requestImages"))) {
+      return NextResponse.json(
+        { status: "error", message: "One or more images couldn't be used. Please upload them again." },
+        { status: 400 }
+      );
+    }
 
     const insert: TablesInsert<"fashion_requests"> = {
       customer_id: ctx.customerId,
@@ -81,7 +98,6 @@ export async function POST(request: Request) {
       status: "submitted",
     };
 
-    const supabase = createClient();
     const { data: created, error: insertError } = await supabase
       .from("fashion_requests")
       .insert(insert)

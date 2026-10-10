@@ -129,6 +129,11 @@ export default function DesignerProfilePage() {
       if (!res.ok) throw new Error(data.message ?? "Couldn't update your photo.");
       setProfile(data.profile);
       push("Profile photo updated.");
+      // The top-right nav avatar comes from app/(designer)/layout.tsx — a Server Component that
+      // resolves the avatar once and stays mounted across client-side navigation within this
+      // route group, so it never sees this PATCH on its own. router.refresh() re-runs Server
+      // Components (layout included) without a full reload — same fix as the customer profile page.
+      router.refresh();
     } catch (err) {
       push(err instanceof Error ? err.message : "Couldn't update your photo.", "error");
     }
@@ -145,6 +150,8 @@ export default function DesignerProfilePage() {
       if (!res.ok) throw new Error(data.message ?? "Couldn't remove your photo.");
       setProfile(data.profile);
       push("Profile photo removed.", "info");
+      // Same reasoning as savePhoto() above — sync the nav back to the default avatar.
+      router.refresh();
     } catch (err) {
       push(err instanceof Error ? err.message : "Couldn't remove your photo.", "error");
     }
@@ -247,8 +254,8 @@ export default function DesignerProfilePage() {
             <div className="flex items-start gap-3 p-4 rounded-md bg-surface-low border border-outline-variant">
               <ShieldCheck size={18} className="text-primary shrink-0 mt-0.5" />
               <p className="text-sm text-ink-variant">
-                HRUNA uses passwordless email sign-in — we email you a one-time code each time you sign in, so there's no
-                password to manage or update.
+                You sign in to HRUNA with your email address and password. Emailed links are only used to confirm your
+                email and to reset a forgotten password — use &ldquo;Forgot password?&rdquo; on the sign-in page to set a new one.
               </p>
             </div>
             <Button variant="danger" className="w-fit mt-4" onClick={handleLogout}>

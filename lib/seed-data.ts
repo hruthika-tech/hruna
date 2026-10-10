@@ -246,7 +246,6 @@ export const seedDesignerOnboarding: DesignerOnboardingProfile[] = seedDesigners
   designerId: d.id,
   phone: d.id === "des-5" ? "+91 90000 12345" : "",
   emailVerified: true,
-  phoneVerified: d.id !== "des-5",
   roles: d.type === "Tailor" ? ["Tailor / Stitching Specialist"] : d.type === "Boutique" ? ["Boutique Owner"] : ["Fashion Designer"],
   specializationCategories: d.specializations,
   specializationCrafts: [],

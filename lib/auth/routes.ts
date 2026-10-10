@@ -48,14 +48,14 @@ const ROUTE_RULES: RouteRule[] = [
   },
 
   // AUTHENTICATED — signed in, but pre-role-selection or mid-onboarding/status pages. Requires a
-  // session; does not require either profile to exist yet. /setup-password and /reset-password
-  // belong here too: both require a real, verified Supabase session (established by
-  // app/auth/confirm/route.ts's verifyOtp() call) — this is the middleware-level half of the
-  // "can't set a password without proving email ownership" guard; the page itself additionally
-  // checks user_metadata.password_set (see app/setup-password/page.tsx) since a valid session
-  // alone doesn't say whether the user already has a real password.
+  // session; does not require either profile to exist yet. /setup-password belongs here too: it
+  // requires a real, verified Supabase session (established by app/auth/confirm/route.ts's
+  // verifyOtp() call) — this is the middleware-level half of the "can't set a password without
+  // proving email ownership" guard; the page itself additionally checks user_metadata.password_set
+  // (see app/setup-password/page.tsx) since a valid session alone doesn't say whether the user
+  // already has a real password.
   {
-    test: /^\/(choose-role|onboarding|designer-onboarding|verification-pending|verification-rejected|subscription|designer-subscription|setup-password|reset-password)(\/|$)/,
+    test: /^\/(choose-role|onboarding|designer-onboarding|verification-pending|verification-rejected|subscription|designer-subscription|setup-password)(\/|$)/,
     level: "authenticated",
   },
 
@@ -64,6 +64,13 @@ const ROUTE_RULES: RouteRule[] = [
   // is the "check your inbox" pending page shown right after signup.
   { test: /^\/auth\/confirm(\/|$)/, level: "public" },
   { test: /^\/verify-email(\/|$)/, level: "public" },
+  // /reset-password is public at the middleware level because it is ALSO an email-link landing
+  // route: Supabase's default recovery link arrives as /reset-password?code=… (or #error_code=…)
+  // BEFORE any session exists — the page itself establishes the recovery session in the browser
+  // (app/reset-password/ResetPasswordFlow.tsx). Gating it on a session here bounced every such
+  // link to /login. The password form only renders once a session exists, and updateUser() is
+  // rejected by Supabase Auth itself without one, so this doesn't loosen what can be done.
+  { test: /^\/reset-password(\/|$)/, level: "public" },
 
   // Everything else — landing page, /login, /create-account, /forgot-password, /become-a-designer,
   // /api/health — is public. (API routes under /api/auth/* and /api/profile/* enforce their OWN

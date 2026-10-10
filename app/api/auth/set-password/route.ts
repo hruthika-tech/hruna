@@ -1,14 +1,15 @@
 /**
- * Sets the password on the CURRENT session's user — shared by both /setup-password (a freshly
- * email-verified signup) and /reset-password (a password-recovery session), since the underlying
- * operation is identical either way: supabase.auth.updateUser({ password }). The password is never
+ * Sets the password on the CURRENT session's user — used by /setup-password (a freshly
+ * email-verified signup): supabase.auth.updateUser({ password }). /reset-password calls
+ * updateUser() from the browser instead (app/reset-password/ResetPasswordFlow.tsx), because the
+ * recovery session may only exist in the browser at that point. The password is never
  * written anywhere except Supabase Auth's own auth.users — public.users has no password column and
  * never will (see supabase/migrations/20260829180003_users_and_profiles.sql).
  *
  * requireUser() (401 JSON) is the correct guard HERE, unlike the pages themselves — this is an API
  * route, and there is no session to redirect from; a caller with no valid session simply isn't
  * allowed to call this at all. The pages additionally gate at the Server Component level (see
- * app/setup-password/page.tsx, app/reset-password/page.tsx) so an unverified visitor never even
+ * app/setup-password/page.tsx) so an unverified visitor never even
  * sees the form this posts to.
  */
 

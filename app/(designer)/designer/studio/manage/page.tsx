@@ -2,7 +2,8 @@
 
 import { useEffect, useState } from "react";
 import Image from "next/image";
-import { Plus, Pencil, Trash2, Loader2 } from "lucide-react";
+import Link from "next/link";
+import { Plus, Pencil, Trash2, Loader2, Camera } from "lucide-react";
 import { Tabs } from "@/components/ui/Tabs";
 import { Button } from "@/components/ui/Button";
 import { Modal } from "@/components/ui/Modal";
@@ -12,7 +13,8 @@ import { SafeImage } from "@/components/ui/SafeImage";
 import { Badge } from "@/components/ui/Badge";
 import { useToast } from "@/hooks/use-toast";
 import { formatCurrency } from "@/lib/utils";
-import type { UploadedImage } from "@/lib/customer/upload-client";
+import { CollectionCoverUpload, type CoverValue } from "@/components/designer/CollectionCoverUpload";
+import { deleteUnusedImage, type UploadedImage } from "@/lib/customer/upload-client";
 
 const TABS = [
   { label: "Highlights", value: "highlights" },
@@ -28,7 +30,10 @@ interface Collection { id: string; name: string; category: string; coverImage: s
 interface Dress { id: string; collectionId: string; name: string; images: string[]; imageFiles?: UploadedImage[]; description: string; price: number; available: boolean }
 interface PreviousCreation { id: string; image: string; description: string; year: string }
 interface DesignerBundle {
+  id: string;
   studioName: string;
+  story: string;
+  experienceYears: number;
   banner: string;
   contactEmail: string;
   openingHours: string;
@@ -51,16 +56,22 @@ export default function ManageStudioPage() {
 
   const [highlightModal, setHighlightModal] = useState<{ id: string | null; image: UploadedImage | null; caption: string } | null>(null);
   const [meetModal, setMeetModal] = useState<{ id: string | null; image: UploadedImage | null; description: string } | null>(null);
-  const [collectionModal, setCollectionModal] = useState<{ id: string | null; name: string; category: string } | null>(null);
+  const [collectionModal, setCollectionModal] = useState<{ id: string | null; name: string; category: string; cover: CoverValue | null; hadCover: boolean } | null>(null);
   const [collectionError, setCollectionError] = useState("");
+  const [coverError, setCoverError] = useState("");
+  const [coverUploading, setCoverUploading] = useState(false);
   const [dressModal, setDressModal] = useState<{ collectionId: string; id: string | null; name: string; images: UploadedImage[]; description: string; price: string; available: boolean } | null>(null);
   const [dressError, setDressError] = useState("");
   const [creationModal, setCreationModal] = useState<{ id: string | null; image: UploadedImage | null; description: string; year: string } | null>(null);
-  const [info, setInfo] = useState({ contactEmail: "", openingHours: "", atelierLocation: "" });
+  const [info, setInfo] = useState({ contactEmail: "", openingHours: "", atelierLocation: "", experienceYears: "" });
+  const [experienceError, setExperienceError] = useState("");
   const [bannerModalOpen, setBannerModalOpen] = useState(false);
   const [bannerDraft, setBannerDraft] = useState<UploadedImage[]>([]);
   const [bannerSaving, setBannerSaving] = useState(false);
   const [bannerError, setBannerError] = useState("");
+  const [aboutDraft, setAboutDraft] = useState<string | null>(null);
+  const [aboutError, setAboutError] = useState("");
+  const [aboutSaving, setAboutSaving] = useState(false);
   const [saving, setSaving] = useState(false);
 
   const load = async () => {
@@ -72,7 +83,7 @@ export default function ManageStudioPage() {
       setCollections(data.collections);
       setDresses(data.dresses);
       setPreviousCreations(data.previousCreations);
-      setInfo({ contactEmail: data.designer.contactEmail, openingHours: data.designer.openingHours, atelierLocation: data.designer.atelierLocation });
+      setInfo({ contactEmail: data.designer.contactEmail, openingHours: data.designer.openingHours, atelierLocation: data.designer.atelierLocation, experienceYears: String(data.designer.experienceYears ?? 0) });
       setStatus("ready");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Couldn't load your Studio.");
@@ -183,25 +194,42 @@ export default function ManageStudioPage() {
     }
   };
 
-  const saveCollection = async () => {
-    if (!collectionModal?.name.trim()) {
-      setCollectionError("Enter a collection name.");
-      return;
-    }
+  const openCollectionModal = (c?: Collection) => {
     setCollectionError("");
+    setCoverError("");
+    setCollectionModal(
+      c
+        ? { id: c.id, name: c.name, category: c.category, cover: c.coverImage ? { url: c.coverImage } : null, hadCover: !!c.coverImage }
+        : { id: null, name: "", category: "", cover: null, hadCover: false }
+    );
+  };
+
+  // Closing without saving discards a cover uploaded during this edit (never the saved one —
+  // that has no fileId on the client; see CoverValue).
+  const closeCollectionModal = () => {
+    if (saving || coverUploading) return;
+    if (collectionModal?.cover?.fileId) void deleteUnusedImage(collectionModal.cover.fileId);
+    setCollectionModal(null);
+  };
+
+  const saveCollection = async () => {
+    if (!collectionModal) return;
+    const nameMissing = !collectionModal.name.trim();
+    // Required for new collections, and can't be removed from one that has it. A collection made
+    // before covers existed can still be renamed without one — it keeps its placeholder.
+    const coverMissing = !collectionModal.cover && (!collectionModal.id || collectionModal.hadCover);
+    setCollectionError(nameMissing ? "Enter a collection name." : "");
+    setCoverError(coverMissing ? "Please upload a collection cover image." : "");
+    if (nameMissing || coverMissing) return;
     setSaving(true);
     try {
+      const body: Record<string, unknown> = { name: collectionModal.name, category: collectionModal.category };
+      if (collectionModal.cover?.fileId) body.coverImageFileId = collectionModal.cover.fileId;
       if (collectionModal.id) {
-        const data = await call(`/api/designer/studio/collections/${collectionModal.id}`, {
-          method: "PATCH",
-          body: JSON.stringify({ name: collectionModal.name, category: collectionModal.category }),
-        });
+        const data = await call(`/api/designer/studio/collections/${collectionModal.id}`, { method: "PATCH", body: JSON.stringify(body) });
         setCollections((prev) => prev.map((c) => (c.id === collectionModal.id ? data.collection : c)));
       } else {
-        const data = await call("/api/designer/studio/collections", {
-          method: "POST",
-          body: JSON.stringify({ name: collectionModal.name, category: collectionModal.category }),
-        });
+        const data = await call("/api/designer/studio/collections", { method: "POST", body: JSON.stringify(body) });
         setCollections((prev) => [...prev, data.collection]);
       }
       setCollectionModal(null);
@@ -305,10 +333,35 @@ export default function ManageStudioPage() {
     }
   };
 
+  const saveAbout = async () => {
+    if (aboutDraft === null) return;
+    if (!aboutDraft.trim()) {
+      setAboutError("Please describe your studio — this can't be empty.");
+      return;
+    }
+    setAboutError("");
+    setAboutSaving(true);
+    try {
+      await call("/api/designer/studio", { method: "PATCH", body: JSON.stringify({ story: aboutDraft }) });
+      setDesigner((d) => (d ? { ...d, story: aboutDraft.trim() } : d));
+      setAboutDraft(null);
+      push("About Studio updated.");
+    } catch (err) {
+      setAboutError(err instanceof Error ? err.message : "Couldn't save your changes.");
+    } finally {
+      setAboutSaving(false);
+    }
+  };
+
   const saveInfo = async () => {
+    if (!/^\d+$/.test(info.experienceYears)) {
+      setExperienceError("Enter a whole number of years (0 or more).");
+      return;
+    }
+    setExperienceError("");
     setSaving(true);
     try {
-      await call("/api/designer/studio", { method: "PATCH", body: JSON.stringify(info) });
+      await call("/api/designer/studio", { method: "PATCH", body: JSON.stringify({ ...info, experienceYears: Number(info.experienceYears) }) });
       push("Studio information updated.");
       await load();
     } catch (err) {
@@ -340,7 +393,10 @@ export default function ManageStudioPage() {
   return (
     <div className="container-editorial py-12 pb-section-gap">
       <p className="text-label-md text-outline mb-2">MANAGE STUDIO</p>
-      <h1 className="text-headline-md mb-8">{designer.studioName}</h1>
+      <div className="flex items-end justify-between gap-4 flex-wrap mb-8">
+        <h1 className="text-headline-md">{designer.studioName}</h1>
+        <Link href={`/studio/${designer.id}`} className="text-sm text-primary hover:underline">View public profile →</Link>
+      </div>
 
       <div className="relative h-48 md:h-64 rounded-md overflow-hidden mb-10 group">
         <SafeImage src={designer.banner} alt={`${designer.studioName} banner`} sizes="100vw" className="object-cover" fallbackIconSize={28} />
@@ -412,20 +468,34 @@ export default function ManageStudioPage() {
         <div className="mt-8">
           <div className="flex items-center justify-between mb-6">
             <p className="text-sm text-ink-variant">Organize your dresses into collections.</p>
-            <Button size="sm" onClick={() => { setCollectionError(""); setCollectionModal({ id: null, name: "", category: "" }); }}><Plus size={14} /> Add Collection</Button>
+            <Button size="sm" onClick={() => openCollectionModal()}><Plus size={14} /> Add Collection</Button>
           </div>
           <div className="flex flex-col gap-8">
             {collections.map((c) => {
               const collectionDresses = dresses.filter((d) => d.collectionId === c.id);
               return (
                 <div key={c.id} className="border border-outline-variant rounded-md p-6">
-                  <div className="flex items-center justify-between mb-4 flex-wrap gap-3">
-                    <div>
-                      <p className="font-display text-xl">{c.name}</p>
-                      <Badge tone="neutral">{c.category}</Badge>
+                  <div className="flex flex-col sm:flex-row sm:items-center gap-4 mb-4">
+                    <div className="relative w-full sm:w-40 aspect-[4/3] shrink-0 rounded-sm overflow-hidden bg-surface-container group">
+                      {c.coverImage ? (
+                        <Image src={c.coverImage} alt={`${c.name} cover`} fill sizes="(max-width: 640px) 100vw, 160px" className="object-cover transition-transform duration-500 group-hover:scale-105" />
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => openCollectionModal(c)}
+                          className="absolute inset-0 flex flex-col items-center justify-center gap-1 text-outline border border-dashed border-outline-variant rounded-sm hover:border-primary hover:text-primary transition-colors"
+                        >
+                          <Camera size={18} strokeWidth={1.5} />
+                          <span className="text-[11px]">Add cover</span>
+                        </button>
+                      )}
                     </div>
-                    <div className="flex items-center gap-2">
-                      <Button size="sm" variant="secondary" onClick={() => { setCollectionError(""); setCollectionModal({ id: c.id, name: c.name, category: c.category }); }}><Pencil size={13} /> Edit</Button>
+                    <div className="flex-1 min-w-0">
+                      <p className="font-display text-xl truncate">{c.name}</p>
+                      {c.category && <Badge tone="neutral">{c.category}</Badge>}
+                    </div>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <Button size="sm" variant="secondary" onClick={() => openCollectionModal(c)}><Pencil size={13} /> Edit</Button>
                       <Button size="sm" variant="danger" onClick={() => deleteCollection(c.id)}><Trash2 size={13} /> Delete</Button>
                       <Button size="sm" onClick={() => { setDressError(""); setDressModal({ collectionId: c.id, id: null, name: "", images: [], description: "", price: "", available: true }); }}>
                         <Plus size={13} /> Add Dress
@@ -493,9 +563,48 @@ export default function ManageStudioPage() {
       {/* STUDIO INFO */}
       {tab === "info" && (
         <div className="mt-8 max-w-md flex flex-col gap-5">
+          <div className="border border-outline-variant rounded-md p-5">
+            <div className="flex items-center justify-between gap-3 mb-3">
+              <p className="text-label-md text-outline">ABOUT STUDIO</p>
+              {aboutDraft === null && (
+                <Button size="sm" variant="secondary" onClick={() => { setAboutError(""); setAboutDraft(designer.story); }}>
+                  <Pencil size={13} /> Edit About Studio
+                </Button>
+              )}
+            </div>
+            {aboutDraft === null ? (
+              designer.story ? (
+                <p className="text-sm text-ink-variant leading-relaxed whitespace-pre-line">{designer.story}</p>
+              ) : (
+                <p className="text-sm text-outline">No description yet. Tell customers about your studio, your craft, and what makes your work special.</p>
+              )
+            ) : (
+              <div className="flex flex-col gap-4">
+                <Field label="About Studio" htmlFor="aboutStudio" required error={aboutError} hint="Shown in the About the Studio section of your public profile.">
+                  <Textarea id="aboutStudio" value={aboutDraft} onChange={(e) => setAboutDraft(e.target.value)} />
+                </Field>
+                <div className="flex gap-2">
+                  <Button size="sm" onClick={saveAbout} disabled={aboutSaving}>{aboutSaving ? "Saving…" : "Save Changes"}</Button>
+                  <Button size="sm" variant="ghost" onClick={() => { setAboutDraft(null); setAboutError(""); }} disabled={aboutSaving}>Cancel</Button>
+                </div>
+              </div>
+            )}
+          </div>
           <Field label="Contact email" htmlFor="contactEmail"><Input id="contactEmail" value={info.contactEmail} onChange={(e) => setInfo((i) => ({ ...i, contactEmail: e.target.value }))} /></Field>
           <Field label="Opening hours" htmlFor="hours"><Input id="hours" value={info.openingHours} onChange={(e) => setInfo((i) => ({ ...i, openingHours: e.target.value }))} /></Field>
           <Field label="Atelier location" htmlFor="location"><Input id="location" value={info.atelierLocation} onChange={(e) => setInfo((i) => ({ ...i, atelierLocation: e.target.value }))} /></Field>
+          <Field label="Years of experience" htmlFor="experienceYears" error={experienceError}>
+            <Input
+              id="experienceYears"
+              type="number"
+              inputMode="numeric"
+              min={0}
+              step={1}
+              value={info.experienceYears}
+              onKeyDown={(e) => { if (["-", "+", "e", "E", ".", ","].includes(e.key)) e.preventDefault(); }}
+              onChange={(e) => { setInfo((i) => ({ ...i, experienceYears: e.target.value.replace(/\D/g, "") })); setExperienceError(""); }}
+            />
+          </Field>
           <Button className="w-fit" onClick={saveInfo} disabled={saving}>{saving ? "Saving…" : "Save Changes"}</Button>
         </div>
       )}
@@ -537,14 +646,22 @@ export default function ManageStudioPage() {
         )}
       </Modal>
 
-      <Modal open={!!collectionModal} onClose={() => (saving ? null : setCollectionModal(null))} title={collectionModal?.id ? "Edit collection" : "Add collection"}>
+      <Modal open={!!collectionModal} onClose={closeCollectionModal} title={collectionModal?.id ? "Edit collection" : "Add collection"}>
         {collectionModal && (
           <div className="flex flex-col gap-5">
             <Field label="Collection name" htmlFor="cName" required error={collectionError}>
               <Input id="cName" value={collectionModal.name} onChange={(e) => setCollectionModal((c) => c && { ...c, name: e.target.value })} />
             </Field>
             <Field label="Category" htmlFor="cCategory" required><Input id="cCategory" value={collectionModal.category} onChange={(e) => setCollectionModal((c) => c && { ...c, category: e.target.value })} /></Field>
-            <Button className="w-full" onClick={saveCollection} disabled={saving}>{saving ? "Saving…" : "Save Collection"}</Button>
+            <Field label="Collection cover image" htmlFor="cCover" required={!collectionModal.id || collectionModal.hadCover}>
+              <CollectionCoverUpload
+                value={collectionModal.cover}
+                onChange={(cover) => { setCollectionModal((c) => c && { ...c, cover }); if (cover) setCoverError(""); }}
+                onUploadingChange={setCoverUploading}
+                error={coverError}
+              />
+            </Field>
+            <Button className="w-full" onClick={saveCollection} disabled={saving || coverUploading}>{saving ? "Saving…" : coverUploading ? "Uploading cover…" : "Save Collection"}</Button>
           </div>
         )}
       </Modal>

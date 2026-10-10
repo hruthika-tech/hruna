@@ -1,8 +1,17 @@
 /**
  * Starts Supabase's password-recovery flow. Separate from app/api/auth/resend/route.ts (which
  * resends a signup CONFIRMATION email) — this sends a RECOVERY email, a different Supabase Auth
- * email type/template (supabase/templates/recovery.html), and lands back on /auth/confirm with
- * `type=recovery`, which routes to /reset-password rather than /setup-password.
+ * email type/template (supabase/templates/recovery.html).
+ *
+ * redirectTo is /reset-password, which owns the whole recovery landing (see app/reset-password/
+ * ResetPasswordFlow.tsx). Both email-link shapes Supabase can send end up there:
+ *   - Default dashboard template ({{ .ConfirmationURL }}): Supabase verifies the token itself, then
+ *     redirects to /reset-password?code=… (PKCE — exchanged in the browser using the code-verifier
+ *     cookie this route's server client sets below), or /reset-password#error_code=otp_expired… .
+ *   - Custom template (supabase/templates/recovery.html): /auth/confirm?token_hash=…&type=recovery
+ *     verifies server-side, then redirects to /reset-password with the session already set.
+ * Because the PKCE verifier is a cookie, the default-template link only works in the same browser
+ * (and on the same host — localhost vs 127.0.0.1 are different cookie jars) that requested it.
  *
  * Always returns the same generic success message regardless of whether the email belongs to a
  * real account — resetPasswordForEmail() itself doesn't error for an unknown email either, and
@@ -29,7 +38,7 @@ export async function POST(request: Request) {
 
     const supabase = createClient();
     const { error } = await supabase.auth.resetPasswordForEmail(email, {
-      redirectTo: `${supabaseConfig.siteUrl()}/auth/confirm`,
+      redirectTo: `${supabaseConfig.siteUrl()}/reset-password`,
     });
     // Deliberately not re-thrown for most cases — see the generic-response note above. A genuine
     // rate-limit (429) is the one thing still worth surfacing, so the user knows to wait rather

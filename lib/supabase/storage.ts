@@ -98,6 +98,29 @@ export async function createSignedFileUrl(
  * own real work (e.g. writing the NEW avatar_file_id) has already succeeded, so a cleanup failure
  * must never surface as the request's own error.
  */
+/**
+ * True only if EVERY id in `fileIds` is an existing upload owned by `ownerId` in the given bucket —
+ * the check to run before linking caller-supplied file ids to anything (e.g. request_images, whose
+ * RLS only checks the parent request, not the file). Pass the caller's own RLS-scoped client:
+ * another user's private file is then simply invisible, so it fails exactly like a nonexistent id
+ * and nothing about it is revealed. Malformed ids fail too (never reach Postgres as a 500).
+ */
+export async function areFilesOwnedInBucket(
+  supabase: AnySupabaseClient,
+  fileIds: string[],
+  ownerId: string,
+  bucket: StorageBucketKey
+): Promise<boolean> {
+  const ids = [...new Set(fileIds)];
+  if (ids.length === 0) return true;
+  if (!ids.every((id) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id))) return false;
+
+  const { data, error } = await supabase.from("files").select("id, owner_id, bucket_id").in("id", ids);
+  if (error) throw error;
+  const bucketId = STORAGE_BUCKETS[bucket].id;
+  return (data ?? []).filter((f) => f.owner_id === ownerId && f.bucket_id === bucketId).length === ids.length;
+}
+
 export async function deleteFileIfOwnedBy(
   supabase: AnySupabaseClient,
   fileId: string,

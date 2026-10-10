@@ -6,7 +6,7 @@ import { Check, Hourglass, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { cn } from "@/lib/utils";
 
-interface Onboarding { emailVerified: boolean; phoneVerified: boolean; roles: string[]; portfolioItems: unknown[]; portfolioOwnershipAccepted: boolean }
+interface Onboarding { emailVerified: boolean; roles: string[]; portfolioItems: unknown[]; portfolioOwnershipAccepted: boolean }
 interface Verification { identityStatus: string; overallStatus: string }
 
 // Real data (Phase 7 fix) — this page used to always read the seeded mock "pending designer"
@@ -56,7 +56,6 @@ export default function VerificationPendingPage() {
   const checklist = [
     { label: "Account created", done: true },
     { label: "Email verified", done: onboarding.emailVerified },
-    { label: "Phone verified", done: onboarding.phoneVerified },
     { label: "Professional profile completed", done: onboarding.roles.length > 0 },
     { label: "Portfolio submitted", done: onboarding.portfolioItems.length >= 3 && onboarding.portfolioOwnershipAccepted },
     { label: "Identity verification", done: verification.identityStatus === "verified", inProgress: verification.identityStatus === "pending" },

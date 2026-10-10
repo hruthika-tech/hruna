@@ -4,12 +4,12 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Field, Input } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
-import { validatePasswordConfirmation } from "@/lib/auth/password";
+import { PASSWORD_HINT, validatePasswordConfirmation } from "@/lib/auth/password";
 
-// Shared by app/setup-password/page.tsx (fresh signup, just verified) and app/reset-password/
-// page.tsx (forgot-password recovery) — the operation is identical either way: POST the new
-// password to /api/auth/set-password, which calls supabase.auth.updateUser({ password }). Only the
-// copy and post-success destination differ between the two callers.
+// Used by app/setup-password/page.tsx (fresh signup, just verified): POSTs the new password to
+// /api/auth/set-password, which calls supabase.auth.updateUser({ password }). Password recovery has
+// its own flow (app/reset-password/ResetPasswordFlow.tsx), since it must first establish the
+// recovery session from the email link in the browser.
 export function PasswordForm({
   heading,
   description,
@@ -57,7 +57,7 @@ export function PasswordForm({
       <h1 className="text-headline-md mb-3">{heading}</h1>
       <p className="text-sm text-ink-variant mb-8">{description}</p>
       <form onSubmit={onSubmit} className="flex flex-col gap-5" noValidate>
-        <Field label="Password" htmlFor="password" required error={errors.password} hint="At least 8 characters.">
+        <Field label="Password" htmlFor="password" required error={errors.password} hint={PASSWORD_HINT}>
           <Input
             id="password"
             type="password"

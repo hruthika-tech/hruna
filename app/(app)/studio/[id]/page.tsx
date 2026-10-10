@@ -6,6 +6,7 @@ import { Avatar, Badge } from "@/components/ui/Badge";
 import { RatingDisplay } from "@/components/ui/Rating";
 import { LinkButton } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
+import { CollectionCard } from "@/components/designer/CollectionCard";
 import { createClient } from "@/lib/supabase/server";
 import { getStudioBundle } from "@/lib/designer/studio-bundle";
 import { formatCurrency, formatDate } from "@/lib/utils";
@@ -15,6 +16,9 @@ import { formatCurrency, formatDate } from "@/lib/utils";
 // This is a Server Component, so the fetch happens directly, server-side, with no client-side
 // loading state needed — the page itself IS the loading boundary (Next's routing shows nothing
 // until this resolves, matching how this page already behaved before Phase 5).
+// Always render with the latest saved studio data — never a cached copy.
+export const dynamic = "force-dynamic";
+
 export default async function PublicStudioPage({ params }: { params: { id: string } }) {
   const supabase = createClient();
   const bundle = await getStudioBundle(supabase, params.id);
@@ -127,16 +131,10 @@ export default async function PublicStudioPage({ params }: { params: { id: strin
           <div className="flex items-end justify-between mb-6">
             <p className="text-label-md text-outline">COLLECTIONS</p>
           </div>
-          <div className="grid md:grid-cols-3 gap-6">
+          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6">
             {studioCollections.map((c) => (
               <Link key={c.id} href={`/collections/${c.id}`}>
-                <Card hover>
-                  <div className="relative h-56">{c.coverImage && <Image src={c.coverImage} alt={c.name} fill sizes="33vw" className="object-cover" />}</div>
-                  <div className="p-5">
-                    <p className="text-xs text-outline uppercase mb-1">{c.category}</p>
-                    <p className="font-display text-lg">{c.name}</p>
-                  </div>
-                </Card>
+                <CollectionCard name={c.name} category={c.category} coverImage={c.coverImage} pieceCount={c.dressIds.length} />
               </Link>
             ))}
           </div>

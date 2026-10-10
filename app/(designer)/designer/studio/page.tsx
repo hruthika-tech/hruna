@@ -5,6 +5,7 @@ import { Avatar, Badge } from "@/components/ui/Badge";
 import { RatingDisplay } from "@/components/ui/Rating";
 import { LinkButton } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
+import { CollectionCard } from "@/components/designer/CollectionCard";
 import { createClient } from "@/lib/supabase/server";
 import { getAuthContext } from "@/lib/supabase/authorization";
 import { getStudioBundle } from "@/lib/designer/studio-bundle";
@@ -14,6 +15,9 @@ import { formatCurrency, formatDate } from "@/lib/utils";
 // (same getStudioBundle()), just for the signed-in designer's own id, plus a "Manage Studio"
 // button. This IS a preview of the real public page, not a separately-maintained mock — anything
 // changed in Manage Studio shows up here immediately, and here is exactly what a customer sees.
+// Always render with the latest saved studio data — never a cached copy.
+export const dynamic = "force-dynamic";
+
 export default async function MyStudioPage() {
   // getAuthContext() (not requireDesigner()) deliberately: middleware only requires a valid
   // session for /designer/* routes, not a completed designer profile (see lib/auth/routes.ts) —
@@ -89,12 +93,9 @@ export default async function MyStudioPage() {
       <section className="container-editorial mt-16">
         <p className="text-label-md text-outline mb-6">COLLECTIONS ({collections.length})</p>
         {collections.length > 0 ? (
-          <div className="grid md:grid-cols-3 gap-6">
+          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6">
             {collections.map((c) => (
-              <Card key={c.id} hover>
-                <div className="relative h-48">{c.coverImage && <Image src={c.coverImage} alt={c.name} fill sizes="33vw" className="object-cover" />}</div>
-                <div className="p-5"><p className="text-xs text-outline uppercase mb-1">{c.category}</p><p className="font-display text-lg">{c.name}</p></div>
-              </Card>
+              <CollectionCard key={c.id} name={c.name} category={c.category} coverImage={c.coverImage} pieceCount={c.dressIds.length} />
             ))}
           </div>
         ) : (

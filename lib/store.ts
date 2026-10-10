@@ -604,7 +604,6 @@ export function ensureDesignerOnboarding(designerId: string, seedEmailVerified: 
       designerId,
       phone: "",
       emailVerified: seedEmailVerified,
-      phoneVerified: false,
       roles: [],
       specializationCategories: [],
       specializationCrafts: [],
@@ -647,10 +646,6 @@ export function saveOnboardingDraft(designerId: string, patch: Partial<Omit<Desi
       o.designerId === designerId ? { ...o, ...patch, updatedAt: new Date().toISOString() } : o
     ),
   }));
-}
-
-export function verifyPhoneForOnboarding(designerId: string) {
-  saveOnboardingDraft(designerId, { phoneVerified: true });
 }
 
 export function addPortfolioItem(designerId: string, item: Omit<PortfolioItem, "id">) {
