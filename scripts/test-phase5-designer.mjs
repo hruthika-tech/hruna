@@ -355,6 +355,84 @@ async function main() {
     check("Designer cannot confirm completion themselves (customer-only route)", designerTryConfirm.status >= 400, designerTryConfirm.data);
   }
 
+  console.log("\n=== 31. Studio images must be the designer's OWN uploads in studio-images ===");
+  {
+    const png = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=", "base64");
+    const upload = async (cookie, bucket, entityType) => {
+      const form = new FormData();
+      form.append("file", new Blob([png], { type: "image/png" }), "t.png");
+      form.append("bucket", bucket);
+      form.append("entityType", entityType);
+      return (await fetch(`${APP_URL}/api/uploads`, { method: "POST", headers: { cookie }, body: form })).json();
+    };
+    const rejectedImage = (r) => r.status === 400 && r.data.message === "That image couldn't be used. Please upload it again.";
+    const SEEDED_DRESS = "e2000000-0000-0000-0000-000000000001";
+    const SEEDED_CREATION = "e3000000-0000-0000-0000-000000000001";
+    const studioImages = async () => {
+      const s = await api(approved, "/api/designer/studio");
+      return {
+        dress: (s.data.dresses ?? []).find((d) => d.id === SEEDED_DRESS)?.images ?? null,
+        creation: (s.data.previousCreations ?? []).find((c) => c.id === SEEDED_CREATION)?.image ?? null,
+        dressNames: (s.data.dresses ?? []).map((d) => d.name),
+      };
+    };
+
+    const own = await upload(approved, "studioImages", "studio_highlight");
+    const foreign = await upload(pending, "studioImages", "studio_highlight"); // another designer's studio image
+    const wrongBucket = await upload(approved, "avatars", "designer_avatar"); // own file, wrong bucket
+    const missingId = "00000000-0000-4000-8000-0000000000bb";
+
+    const okMeet = await api(approved, "/api/designer/studio/meet-entries", { method: "POST", body: JSON.stringify({ fileId: own.fileId, description: "own image" }) });
+    check("31a. A designer can still use their OWN studio image (meet-the-designer)", okMeet.status === 200, okMeet.data);
+
+    const hlForeign = await api(approved, "/api/designer/studio/highlights", { method: "POST", body: JSON.stringify({ fileId: foreign.fileId, caption: "x" }) });
+    check("31b. Highlight with ANOTHER designer's image is rejected", rejectedImage(hlForeign), hlForeign.data);
+    const hlBucket = await api(approved, "/api/designer/studio/highlights", { method: "POST", body: JSON.stringify({ fileId: wrongBucket.fileId, caption: "x" }) });
+    check("31c. Highlight with own image from the WRONG bucket (avatars) is rejected", rejectedImage(hlBucket), hlBucket.data);
+    const hlMissing = await api(approved, "/api/designer/studio/highlights", { method: "POST", body: JSON.stringify({ fileId: missingId, caption: "x" }) });
+    check("31d. Highlight with a nonexistent file id is rejected", rejectedImage(hlMissing), hlMissing.data);
+
+    const meetForeign = await api(approved, "/api/designer/studio/meet-entries", { method: "POST", body: JSON.stringify({ fileId: foreign.fileId, description: "x" }) });
+    check("31e. Meet-the-designer entry with another designer's image is rejected", rejectedImage(meetForeign), meetForeign.data);
+
+    const pcForeign = await api(approved, "/api/designer/studio/previous-creations", { method: "POST", body: JSON.stringify({ imageFileId: foreign.fileId, description: "x", year: "2026" }) });
+    check("31f. Previous creation with another designer's image is rejected", rejectedImage(pcForeign), pcForeign.data);
+
+    const mixedName = `Ownership test dress ${Date.now()}`;
+    const dressMixed = await api(approved, "/api/designer/studio/dresses", {
+      method: "POST",
+      body: JSON.stringify({ collectionId: "e1000000-0000-0000-0000-000000000001", name: mixedName, price: 1000, available: true, imageFileIds: [own.fileId, foreign.fileId] }),
+    });
+    check("31g. A new dress with a mix of own + foreign images is rejected", rejectedImage(dressMixed), dressMixed.data);
+    check("     ...and NO dress was created", !(await studioImages()).dressNames.includes(mixedName));
+
+    const before = await studioImages();
+    const dressPatch = await api(approved, `/api/designer/studio/dresses/${SEEDED_DRESS}`, { method: "PATCH", body: JSON.stringify({ imageFileIds: [foreign.fileId] }) });
+    check("31h. Replacing a dress's images with a foreign image is rejected", rejectedImage(dressPatch), dressPatch.data);
+    const pcPatch = await api(approved, `/api/designer/studio/previous-creations/${SEEDED_CREATION}`, { method: "PATCH", body: JSON.stringify({ imageFileId: foreign.fileId }) });
+    check("31i. Replacing a previous creation's image with a foreign image is rejected", rejectedImage(pcPatch), pcPatch.data);
+    const hlPatchTarget = (await api(approved, "/api/designer/studio")).data.designer?.highlights?.[0]?.id;
+    const hlPatch = await api(approved, `/api/designer/studio/highlights/${hlPatchTarget}`, { method: "PATCH", body: JSON.stringify({ fileId: foreign.fileId }) });
+    check("31j. Replacing a highlight's image with a foreign image is rejected", rejectedImage(hlPatch), hlPatch.data);
+    const after = await studioImages();
+    check("     ...and the existing dress + previous-creation images are untouched (nothing deleted first)",
+      before.dress?.length === 1 && JSON.stringify(after.dress) === JSON.stringify(before.dress) && !!before.creation && after.creation === before.creation,
+      { before, after });
+  }
+
+  console.log("\n=== 32. Years of experience is limited to whole numbers 0–80 ===");
+  {
+    const setYears = (v) => api(approved, "/api/designer/studio", { method: "PATCH", body: JSON.stringify({ experienceYears: v }) });
+    const ok80 = await setYears(80);
+    check("32a. 80 years is accepted", ok80.status === 200, ok80.data);
+    for (const v of [81, 1000000, -1, 2.5]) {
+      const r = await setYears(v);
+      check(`32b. ${v} is rejected with a clear 400`, r.status === 400 && /0 to 80/.test(r.data.message ?? ""), r.data);
+    }
+    const stored = (await api(approved, "/api/designer/studio")).data.designer?.experienceYears;
+    check("     ...and the stored value is still the last valid one (80)", stored === 80, { stored });
+  }
+
   console.log(`\n${pass} passed, ${fail} failed.`);
   if (fail > 0) {
     console.log("Failed:", failures.join(", "));

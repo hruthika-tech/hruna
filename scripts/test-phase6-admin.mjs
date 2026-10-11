@@ -87,6 +87,9 @@ async function main() {
   {
     const res = await api(admin, `/api/admin/designers/${PENDING_DESIGNER_ID}`);
     check("9. Admin can view a full designer review bundle", res.status === 200, res.data);
+    // The seeded designer's email IS confirmed — a successful lookup must report true (a failed one
+    // reports null → shown as "Unknown"; it must never fall back to false / "Not verified").
+    check("   ...and reports the confirmed email as verified (true, not null/false)", res.data.onboarding?.emailVerified === true, res.data.onboarding?.emailVerified);
     const denied = await api(customerA, `/api/admin/designers/${PENDING_DESIGNER_ID}`);
     check("10. Non-admin cannot view a designer review bundle", denied.status !== 200, denied.data);
   }

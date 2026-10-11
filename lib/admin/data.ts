@@ -67,14 +67,20 @@ export async function resolvePortfolioItemImageAsAdmin(supabase: Supa, fileId: s
 /* trustworthy source — which needs the service-role Auth admin API.   */
 /* ------------------------------------------------------------------ */
 
-export async function getDesignerEmailVerifiedAsAdmin(supabase: Supa, designerId: string): Promise<boolean> {
-  const { data: profile } = await supabase.from("designer_profiles").select("user_id").eq("id", designerId).maybeSingle();
-  if (!profile) return false;
+// Returns null when the status can't be determined (profile/auth lookup failed, or the admin client
+// is unavailable) — so the admin page shows "Unknown" instead of wrongly claiming "Not verified".
+export async function getDesignerEmailVerifiedAsAdmin(supabase: Supa, designerId: string): Promise<boolean | null> {
+  try {
+    const { data: profile } = await supabase.from("designer_profiles").select("user_id").eq("id", designerId).maybeSingle();
+    if (!profile) return null;
 
-  const admin = createAdminClient();
-  const { data, error } = await admin.auth.admin.getUserById(profile.user_id);
-  if (error || !data.user) return false;
-  return emailConfirmed(data.user);
+    const admin = createAdminClient();
+    const { data, error } = await admin.auth.admin.getUserById(profile.user_id);
+    if (error || !data.user) return null;
+    return emailConfirmed(data.user);
+  } catch {
+    return null;
+  }
 }
 
 /* ------------------------------------------------------------------ */

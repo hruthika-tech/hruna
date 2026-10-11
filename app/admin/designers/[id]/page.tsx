@@ -10,6 +10,7 @@ import { Modal } from "@/components/ui/Modal";
 import { Field, Textarea } from "@/components/ui/Input";
 import { useToast } from "@/hooks/use-toast";
 import { formatDate, cn } from "@/lib/utils";
+import { emailVerificationLabel } from "@/lib/admin/email-status";
 
 type ReasonAction = "portfolio_revision" | "portfolio_reject" | "identity_fail" | "profile_reject" | "profile_suspend";
 
@@ -24,7 +25,7 @@ const ACTION_ENDPOINT: Record<ReasonAction, string> = {
 interface Bundle {
   designer: { id: string; name: string; avatar: string; city: string };
   onboarding: {
-    emailVerified: boolean; phone: string; roles: string[];
+    emailVerified: boolean | null; phone: string; roles: string[];
     specializationCategories: string[]; specializationCrafts: string[];
     experienceDescription: string; experienceLevel: string; learningBackground: string;
     credentials: { id: string; type: string; institution?: string; qualification?: string; year?: string }[];
@@ -137,7 +138,7 @@ export default function AdminDesignerReviewPage() {
           <section className="border border-white/10 rounded-md p-6">
             <p className="text-white/50 text-xs uppercase tracking-wide mb-4">Personal / Identity Status</p>
             <div className="grid sm:grid-cols-3 gap-4 text-sm mb-6">
-              <div><p className="text-white/40 text-xs mb-1">Email</p><p>{onboarding.emailVerified ? "Verified ✓" : "Not verified"}</p></div>
+              <div><p className="text-white/40 text-xs mb-1">Email</p><p>{emailVerificationLabel(onboarding.emailVerified)}</p></div>
               <div><p className="text-white/40 text-xs mb-1">Phone</p><p>{onboarding.phone || "Not provided"}</p></div>
               <div><p className="text-white/40 text-xs mb-1">Identity</p><p className="capitalize">{verification.identityStatus.replace(/_/g, " ")}</p></div>
             </div>

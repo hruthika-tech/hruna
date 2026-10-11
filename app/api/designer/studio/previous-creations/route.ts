@@ -10,6 +10,7 @@ import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { requireDesigner } from "@/lib/supabase/authorization";
 import { errorResponse } from "@/lib/supabase/errors";
+import { areFilesOwnedInBucket } from "@/lib/supabase/storage";
 import { mapPreviousCreation, resolvePreviousCreationImages } from "@/lib/designer/data";
 import type { TablesInsert } from "@/lib/supabase/types";
 
@@ -25,6 +26,11 @@ export async function POST(request: Request) {
     }
 
     const supabase = createClient();
+    // The image(s) must be the caller's own uploads in the public studio-images bucket — checked
+    // before any write, so a rejected request changes nothing.
+    if (!(await areFilesOwnedInBucket(supabase, [imageFileId], ctx.user.id, "studioImages"))) {
+      return NextResponse.json({ status: "error", message: "That image couldn't be used. Please upload it again." }, { status: 400 });
+    }
     const insert: TablesInsert<"previous_creations"> = {
       designer_id: ctx.designerId,
       description: typeof body?.description === "string" ? body.description : null,

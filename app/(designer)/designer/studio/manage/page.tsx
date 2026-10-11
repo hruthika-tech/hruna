@@ -354,8 +354,8 @@ export default function ManageStudioPage() {
   };
 
   const saveInfo = async () => {
-    if (!/^\d+$/.test(info.experienceYears)) {
-      setExperienceError("Enter a whole number of years (0 or more).");
+    if (!/^\d+$/.test(info.experienceYears) || Number(info.experienceYears) > 80) {
+      setExperienceError("Enter a whole number of years from 0 to 80.");
       return;
     }
     setExperienceError("");
@@ -599,6 +599,7 @@ export default function ManageStudioPage() {
               type="number"
               inputMode="numeric"
               min={0}
+              max={80}
               step={1}
               value={info.experienceYears}
               onKeyDown={(e) => { if (["-", "+", "e", "E", ".", ","].includes(e.key)) e.preventDefault(); }}

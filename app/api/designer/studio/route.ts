@@ -56,8 +56,10 @@ export async function PATCH(request: Request) {
     if (body && "experienceYears" in body) {
       // designer_profiles.experience_years is an int with a >= 0 check — reject anything else here
       // with a clear message instead of letting the database turn it into a 500.
-      if (!Number.isSafeInteger(body.experienceYears) || body.experienceYears < 0) {
-        return NextResponse.json({ status: "error", message: "Years of experience must be a whole number (0 or more)." }, { status: 400 });
+      // Upper bound keeps it realistic (and well inside the int column, which a huge value would
+      // otherwise overflow into a 500).
+      if (!Number.isSafeInteger(body.experienceYears) || body.experienceYears < 0 || body.experienceYears > 80) {
+        return NextResponse.json({ status: "error", message: "Years of experience must be a whole number from 0 to 80." }, { status: 400 });
       }
       patch.experience_years = body.experienceYears;
     }

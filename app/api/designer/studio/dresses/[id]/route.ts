@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { requireDesigner } from "@/lib/supabase/authorization";
 import { errorResponse } from "@/lib/supabase/errors";
+import { areFilesOwnedInBucket } from "@/lib/supabase/storage";
 import { mapDress, resolveDressImages } from "@/lib/designer/data";
 import type { TablesUpdate } from "@/lib/supabase/types";
 
@@ -20,6 +21,11 @@ export async function PATCH(request: Request, { params }: { params: { id: string
     if (typeof body?.fabric === "string") patch.fabric = body.fabric;
 
     const supabase = createClient();
+    // The image(s) must be the caller's own uploads in the public studio-images bucket — checked
+    // before any write, so a rejected request changes nothing.
+    if (Array.isArray(body?.imageFileIds) && !(await areFilesOwnedInBucket(supabase, body.imageFileIds.filter((id: unknown): id is string => typeof id === "string"), ctx.user.id, "studioImages"))) {
+      return NextResponse.json({ status: "error", message: "That image couldn't be used. Please upload it again." }, { status: 400 });
+    }
     const { data, error } = await supabase
       .from("dresses")
       .update(patch)

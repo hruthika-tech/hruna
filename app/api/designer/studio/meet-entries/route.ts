@@ -7,6 +7,7 @@ import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { requireDesigner } from "@/lib/supabase/authorization";
 import { errorResponse } from "@/lib/supabase/errors";
+import { areFilesOwnedInBucket } from "@/lib/supabase/storage";
 import { mapMeetEntry, resolveStudioImage } from "@/lib/designer/data";
 import type { TablesInsert } from "@/lib/supabase/types";
 
@@ -25,6 +26,11 @@ export async function POST(request: Request) {
     }
 
     const supabase = createClient();
+    // The image(s) must be the caller's own uploads in the public studio-images bucket — checked
+    // before any write, so a rejected request changes nothing.
+    if (!(await areFilesOwnedInBucket(supabase, [fileId], ctx.user.id, "studioImages"))) {
+      return NextResponse.json({ status: "error", message: "That image couldn't be used. Please upload it again." }, { status: 400 });
+    }
     const { count } = await supabase
       .from("meet_the_designer_entries")
       .select("id", { count: "exact", head: true })

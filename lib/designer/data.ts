@@ -287,7 +287,7 @@ export function emailConfirmed(user: Pick<User, "email_confirmed_at"> | null | u
  * designer_onboarding.phone_verified is deliberately NOT surfaced: there is no SMS verification in
  * V1, so the phone is an optional, unverified contact detail only.
  */
-export function mapOnboarding(row: Tables<"designer_onboarding">, emailVerified: boolean) {
+export function mapOnboarding(row: Tables<"designer_onboarding">, emailVerified: boolean | null) {
   return {
     designerId: row.designer_id,
     phone: row.phone ?? "",

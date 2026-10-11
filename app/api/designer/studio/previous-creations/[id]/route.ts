@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { requireDesigner } from "@/lib/supabase/authorization";
 import { errorResponse } from "@/lib/supabase/errors";
+import { areFilesOwnedInBucket } from "@/lib/supabase/storage";
 import { mapPreviousCreation, resolvePreviousCreationImages } from "@/lib/designer/data";
 import type { TablesUpdate } from "@/lib/supabase/types";
 
@@ -17,6 +18,11 @@ export async function PATCH(request: Request, { params }: { params: { id: string
     if (typeof body?.year === "string") patch.year = body.year;
 
     const supabase = createClient();
+    // The image(s) must be the caller's own uploads in the public studio-images bucket — checked
+    // before any write, so a rejected request changes nothing.
+    if (typeof body?.imageFileId === "string" && !(await areFilesOwnedInBucket(supabase, [body.imageFileId], ctx.user.id, "studioImages"))) {
+      return NextResponse.json({ status: "error", message: "That image couldn't be used. Please upload it again." }, { status: 400 });
+    }
     const { data, error } = await supabase
       .from("previous_creations")
       .update(patch)
