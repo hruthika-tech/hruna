@@ -15,7 +15,7 @@ npm install
 npm run dev
 ```
 
-Then open http://localhost:3000.
+Then open https://hruna.in .
 
 > This project was written directly (no `npm install` was run in the build sandbox, which
 > has no network access) — install locally to run and verify it. If you hit a dependency
