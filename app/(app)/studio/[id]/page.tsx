@@ -10,6 +10,7 @@ import { CollectionCard } from "@/components/designer/CollectionCard";
 import { createClient } from "@/lib/supabase/server";
 import { getStudioBundle } from "@/lib/designer/studio-bundle";
 import { formatCurrency, formatDate } from "@/lib/utils";
+import { DressAvailabilityNote } from "@/components/dresses/DressAvailabilityNote";
 
 // Real data (Phase 5) — designer_profiles + studio content, via the same lib/designer/
 // studio-bundle.ts bundle the designer's own "My Studio" preview and app/api/studio/[id] use.
@@ -153,6 +154,7 @@ export default async function PublicStudioPage({ params }: { params: { id: strin
                   <div className="p-4">
                     <p className="text-sm font-medium truncate">{d.name}</p>
                     <p className="text-primary text-sm mt-1">{formatCurrency(d.price)}</p>
+                    <DressAvailabilityNote dress={d} />
                   </div>
                 </Card>
               </Link>

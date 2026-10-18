@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { AuthShell } from "@/components/layout/AuthShell";
 import { Field, Input } from "@/components/ui/Input";
+import { PasswordInput } from "@/components/ui/PasswordInput";
 import { Button } from "@/components/ui/Button";
 import { safeNextPath } from "@/lib/auth/safe-redirect";
 
@@ -15,8 +16,11 @@ import { safeNextPath } from "@/lib/auth/safe-redirect";
 function LoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  // Only same-site relative paths — anything else (absolute URLs, //host, /\host…) becomes /home.
-  const next = safeNextPath(searchParams.get("next"));
+  // An explicit ?next= (set by middleware when it bounced a visitor to /login) is honoured, but only
+  // as a same-site relative path (absolute URLs, //host, /\host… become /home). Without one, the
+  // server's role-based `home` decides (admin /admin, customer /home, designer /designer/home).
+  const nextParam = searchParams.get("next");
+  const next = nextParam ? safeNextPath(nextParam) : null;
   const [form, setForm] = useState({ email: "", password: "" });
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
@@ -39,7 +43,7 @@ function LoginForm() {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.message ?? "Something went wrong. Please try again.");
-      router.push(data.redirectTo ?? next);
+      router.push(data.redirectTo ?? next ?? safeNextPath(data.home));
     } catch (err) {
       setError(err instanceof Error ? err.message : "Something went wrong. Please try again.");
       setLoading(false);
@@ -68,9 +72,8 @@ function LoginForm() {
           />
         </Field>
         <Field label="Password" htmlFor="password" required error={error && form.password ? error : undefined}>
-          <Input
+          <PasswordInput
             id="password"
-            type="password"
             value={form.password}
             onChange={(e) => update("password", e.target.value)}
             autoComplete="current-password"

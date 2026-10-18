@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { BlockedUsersPanel } from "@/components/profile/BlockedUsersPanel";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import {
@@ -31,6 +32,7 @@ const TABS = [
   { label: "Verification", value: "verification" },
   { label: "Security", value: "security" },
   { label: "Notifications", value: "notifications" },
+  { label: "Blocked users", value: "blocked" },
 ];
 
 // Same 9 canonical policy routes the customer Settings page links to (app/(app)/profile/page.tsx)
@@ -58,10 +60,15 @@ export default function DesignerProfilePage() {
   const router = useRouter();
   const { push } = useToast();
   const [tab, setTab] = useState("personal");
+  // Settings → Blocked users can be linked to directly (?tab=blocked), e.g. from a blocked conversation.
+  useEffect(() => {
+    if (new URLSearchParams(window.location.search).get("tab") === "blocked") setTab("blocked");
+  }, []);
 
   const [status, setStatus] = useState<"loading" | "error" | "ready">("loading");
   const [error, setError] = useState("");
   const [email, setEmail] = useState("");
+  const [pendingEmail, setPendingEmail] = useState<string | null>(null);
   const [profile, setProfile] = useState<{ displayName: string; avatar: string } | null>(null);
   const [name, setName] = useState("");
   const [saving, setSaving] = useState(false);
@@ -84,6 +91,7 @@ export default function DesignerProfilePage() {
         const verificationData = await verificationRes.json();
 
         setEmail(sessionData.email ?? "");
+        setPendingEmail(sessionData.pendingEmail ?? null);
         setProfile(profileData.profile);
         setName(profileData.profile.displayName);
         if (verificationRes.ok) {
@@ -201,9 +209,13 @@ export default function DesignerProfilePage() {
       <div className="mt-8 max-w-lg">
         {tab === "personal" && (
           <div className="flex flex-col gap-5">
-            <UploadingProfilePhotoSection photoUrl={profile.avatar} name={profile.displayName || "Designer"} onSave={savePhoto} onRemove={profile.avatar ? removePhoto : undefined} />
+            <UploadingProfilePhotoSection photoUrl={profile.avatar} name={profile.displayName || "Designer"} onSave={savePhoto} onRemove={profile.avatar ? removePhoto : undefined} entityType="designer_avatar" />
             <Field label="Full name" htmlFor="name"><Input id="name" value={name} onChange={(e) => setName(e.target.value)} /></Field>
-            <Field label="Email" htmlFor="email"><Input id="email" value={email} disabled /></Field>
+            <div>
+              <Field label="Email" htmlFor="email"><Input id="email" value={email} disabled /></Field>
+              {pendingEmail && <p className="text-sm text-ink-variant mt-2">Waiting for confirmation: {pendingEmail}</p>}
+              <Link href="/account/email" className="text-sm text-primary hover:underline mt-2 inline-block">Change email →</Link>
+            </div>
             <div className="flex gap-3 mt-2">
               <Button onClick={saveProfile} disabled={saving}>{saving ? "Saving…" : "Save Changes"}</Button>
               <LinkButton href="/designer/studio/manage" variant="secondary">Manage Studio</LinkButton>
@@ -264,6 +276,7 @@ export default function DesignerProfilePage() {
           </div>
         )}
 
+        {tab === "blocked" && <BlockedUsersPanel />}
         {tab === "notifications" && (
           <div className="flex flex-col gap-4">
             {Object.entries(notifPrefs).map(([key, value]) => (

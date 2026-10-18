@@ -73,7 +73,10 @@ export interface Dress {
   images: string[];
   description: string;
   price: number;
+  /** "Available for purchase" — offered at all (see lib/dresses/availability.ts). */
   available: boolean;
+  /** Designer-set stock status, separate from `available`. Always set for real data (mapDress). */
+  stockStatus?: "in_stock" | "made_to_order" | "unavailable";
   fabric: string;
 }
 

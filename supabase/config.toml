@@ -261,6 +261,12 @@ content_path = "./supabase/templates/confirmation.html"
 subject = "Reset your HRUNA password"
 content_path = "./supabase/templates/recovery.html"
 
+# Email change (both the current and the new address get a link — double_confirm_changes above).
+# token_hash links verified by app/auth/confirm/route.ts, same cross-browser-safe approach as signup.
+[auth.email.template.email_change]
+subject = "Confirm your HRUNA email change"
+content_path = "./supabase/templates/email_change.html"
+
 # Uncomment to customize email template
 # [auth.email.template.invite]
 # subject = "You have been invited"

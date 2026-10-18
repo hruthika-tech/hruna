@@ -9,6 +9,7 @@ import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { supabaseConfig } from "@/lib/supabase/config";
 import { errorResponse } from "@/lib/supabase/errors";
+import { authCallbackUrl } from "@/lib/auth/auth-flows";
 
 export const dynamic = "force-dynamic";
 
@@ -24,7 +25,7 @@ export async function POST(request: Request) {
     const { error } = await supabase.auth.resend({
       type: "signup",
       email,
-      options: { emailRedirectTo: `${supabaseConfig.siteUrl()}/auth/confirm` },
+      options: { emailRedirectTo: authCallbackUrl(supabaseConfig.siteUrl(), "signup") },
     });
     if (error) {
       if (/already.*confirmed|already been confirmed/i.test(error.message)) {

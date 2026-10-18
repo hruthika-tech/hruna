@@ -64,6 +64,10 @@ const ROUTE_RULES: RouteRule[] = [
   // is the "check your inbox" pending page shown right after signup.
   { test: /^\/auth\/confirm(\/|$)/, level: "public" },
   { test: /^\/verify-email(\/|$)/, level: "public" },
+  // /account/email — where email-change links land (app/auth/confirm/route.ts). Public at this level
+  // because the final link may be opened where nobody is signed in (another device); the page shows
+  // the result either way, and the change form + POST /api/auth/email both require a session.
+  { test: /^\/account\/email(\/|$)/, level: "public" },
   // /reset-password is public at the middleware level because it is ALSO an email-link landing
   // route: Supabase's default recovery link arrives as /reset-password?code=… (or #error_code=…)
   // BEFORE any session exists — the page itself establishes the recovery session in the browser
@@ -84,4 +88,17 @@ export function classifyRoute(pathname: string): AccessLevel {
     if (rule.test.test(pathname)) return rule.level;
   }
   return "public";
+}
+
+/**
+ * Where a signed-in account belongs, from its VERIFIED role state (never from client input):
+ * admin → /admin; customer → /home (also covers a dual-role customer+designer account);
+ * designer-only → /designer/home; no profile yet → /choose-role (finish setting up the account).
+ * Used by POST /api/auth/login to pick the default destination after sign-in.
+ */
+export function roleHomePath(roles: { isAdmin: boolean; hasCustomerProfile: boolean; hasDesignerProfile: boolean }): string {
+  if (roles.isAdmin) return "/admin";
+  if (roles.hasCustomerProfile) return "/home";
+  if (roles.hasDesignerProfile) return "/designer/home";
+  return "/choose-role";
 }

@@ -11,6 +11,8 @@ import { errorResponse } from "@/lib/supabase/errors";
 import { areFilesOwnedInBucket } from "@/lib/supabase/storage";
 import { mapDress, resolveDressImages } from "@/lib/designer/data";
 import type { TablesInsert } from "@/lib/supabase/types";
+import { isStockStatus } from "@/lib/dresses/availability";
+import { isMissingStockStatusColumn } from "@/lib/dresses/stock-status-column";
 
 export const dynamic = "force-dynamic";
 
@@ -22,6 +24,10 @@ export async function POST(request: Request) {
     const collectionId = typeof body?.collectionId === "string" ? body.collectionId : "";
     if (!name || !collectionId) {
       return NextResponse.json({ status: "error", message: "A name and a collection are required." }, { status: 400 });
+    }
+    // Stock status (in stock / made to order / currently unavailable) — separate from `available`.
+    if (body?.stockStatus !== undefined && !isStockStatus(body.stockStatus)) {
+      return NextResponse.json({ status: "error", message: "Choose a valid availability." }, { status: 400 });
     }
     const imageFileIds: string[] = Array.isArray(body?.imageFileIds)
       ? body.imageFileIds.filter((id: unknown): id is string => typeof id === "string")
@@ -51,9 +57,19 @@ export async function POST(request: Request) {
       price: typeof body?.price === "number" ? body.price : 0,
       available: typeof body?.available === "boolean" ? body.available : true,
       fabric: typeof body?.fabric === "string" ? body.fabric : null,
+      ...(isStockStatus(body?.stockStatus) ? { stock_status: body.stockStatus } : {}),
     };
-    const { data: created, error } = await supabase.from("dresses").insert(insert).select().single();
+    let stockStatusSaved = true;
+    let { data: created, error } = await supabase.from("dresses").insert(insert).select().single();
+    if (error && isMissingStockStatusColumn(error)) {
+      // This database doesn't have dresses.stock_status yet: create the dress without it.
+      const { stock_status: _skipped, ...withoutStockStatus } = insert;
+      void _skipped;
+      stockStatusSaved = false;
+      ({ data: created, error } = await supabase.from("dresses").insert(withoutStockStatus).select().single());
+    }
     if (error) throw error;
+    if (!created) throw new Error("dress insert returned no row");
 
     if (imageFileIds.length > 0) {
       const rows = imageFileIds.map((file_id, position) => ({ dress_id: created.id, file_id, position }));
@@ -62,7 +78,7 @@ export async function POST(request: Request) {
     }
 
     const images = await resolveDressImages(supabase, created.id);
-    return NextResponse.json({ status: "ok", dress: mapDress(created, images) });
+    return NextResponse.json({ status: "ok", dress: mapDress(created, images), stockStatusSaved });
   } catch (err) {
     return errorResponse(err, "api.designer.studio.dresses.create");
   }

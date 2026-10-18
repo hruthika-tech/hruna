@@ -2,7 +2,7 @@
 
 import Image from "next/image";
 import { useEffect, useState } from "react";
-import { ImageOff } from "lucide-react";
+import { ImageOff, type LucideIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 export function SafeImage({
@@ -11,12 +11,16 @@ export function SafeImage({
   sizes,
   className,
   fallbackIconSize = 20,
+  fallbackIcon: FallbackIcon = ImageOff,
 }: {
   src?: string;
   alt: string;
   sizes?: string;
   className?: string;
   fallbackIconSize?: number;
+  /** Shown when there's no src or it fails to load. ImageOff suits content images; avatars pass a
+   *  person icon so "no photo yet" never looks like a broken image. */
+  fallbackIcon?: LucideIcon;
 }) {
   const [errored, setErrored] = useState(false);
 
@@ -26,7 +30,7 @@ export function SafeImage({
   if (!src || errored) {
     return (
       <div className={cn("w-full h-full bg-surface-container flex items-center justify-center text-outline", className)}>
-        <ImageOff size={fallbackIconSize} />
+        <FallbackIcon size={fallbackIconSize} aria-hidden="true" />
       </div>
     );
   }

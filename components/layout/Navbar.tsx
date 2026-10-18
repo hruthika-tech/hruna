@@ -6,6 +6,8 @@ import { useEffect, useState } from "react";
 import { Search, Bell, MessageCircle, Menu, X, Heart } from "lucide-react";
 import { Avatar } from "@/components/ui/Badge";
 import { cn } from "@/lib/utils";
+import { useUnreadCounts } from "@/lib/badges/client";
+import { BadgeIconLink, DrawerCount, MenuDot, unreadLabel } from "./NavBadges";
 
 const navLinks = [
   { href: "/discover", label: "Discover" },
@@ -21,6 +23,9 @@ export function Navbar({ name, avatar }: { name: string; avatar: string }) {
   const [open, setOpen] = useState(false);
   const displayName = name || "Your Profile";
   const avatarUrl = avatar;
+  // This customer's own unread counts (null = unknown/none → no badge).
+  const unread = useUnreadCounts("customer");
+  const anyUnread = (unread.messages ?? 0) + (unread.notifications ?? 0) > 0;
 
   // Lock the page behind the mobile menu — otherwise the underlying content stays scrollable
   // while the overlay is open. Restored on close/unmount so this never leaks into a stuck state.
@@ -78,31 +83,24 @@ export function Navbar({ name, avatar }: { name: string; avatar: string }) {
           >
             <Heart size={19} />
           </Link>
-          <Link
-            href="/notifications"
-            aria-label="Notifications"
-            className="p-2.5 rounded-full hover:bg-ink/5 text-ink-variant transition-colors"
-          >
+          <BadgeIconLink href="/notifications" label="Notifications" count={unread.notifications}>
             <Bell size={19} />
-          </Link>
-          <Link
-            href="/messages"
-            aria-label="Messages"
-            className="p-2.5 rounded-full hover:bg-ink/5 text-ink-variant transition-colors"
-          >
+          </BadgeIconLink>
+          <BadgeIconLink href="/messages" label="Messages" count={unread.messages}>
             <MessageCircle size={19} />
-          </Link>
+          </BadgeIconLink>
           <Link href="/profile" className="ml-2" aria-label="Profile">
             <Avatar src={avatarUrl} alt={displayName} size={38} />
           </Link>
         </div>
 
         <button
-          className="lg:hidden p-2 text-ink-variant"
-          aria-label="Open menu"
+          className="relative lg:hidden p-2 text-ink-variant"
+          aria-label={anyUnread ? "Open menu, you have unread items" : "Open menu"}
           onClick={() => setOpen(true)}
         >
           <Menu size={22} />
+          <MenuDot show={anyUnread} />
         </button>
       </div>
     </header>
@@ -126,18 +124,27 @@ export function Navbar({ name, avatar }: { name: string; avatar: string }) {
           </button>
         </div>
         <nav className="flex flex-col gap-1 px-6 pt-4 overflow-y-auto">
-          {[...navLinks, { href: "/saved", label: "Saved Items" }, { href: "/messages", label: "Messages" }, { href: "/notifications", label: "Notifications" }, { href: "/profile", label: "Profile & Settings" }].map(
-            (link) => (
+          {[
+            ...navLinks,
+            { href: "/saved", label: "Saved Items" },
+            { href: "/messages", label: "Messages", count: unread.messages },
+            { href: "/notifications", label: "Notifications", count: unread.notifications },
+            { href: "/profile", label: "Profile & Settings" },
+          ].map((link) => {
+            const count = "count" in link ? link.count ?? null : null;
+            return (
               <Link
                 key={link.href}
                 href={link.href}
                 onClick={() => setOpen(false)}
+                aria-label={unreadLabel(link.label, count)}
                 className="py-4 text-headline-sm border-b border-outline-variant"
               >
                 {link.label}
+                <DrawerCount count={count} />
               </Link>
-            )
-          )}
+            );
+          })}
         </nav>
       </div>
     )}

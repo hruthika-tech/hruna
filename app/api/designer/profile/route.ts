@@ -15,7 +15,7 @@ import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { requireDesigner } from "@/lib/supabase/authorization";
 import { errorResponse } from "@/lib/supabase/errors";
-import { getPublicFileUrl, deleteFileIfOwnedBy } from "@/lib/supabase/storage";
+import { getPublicFileUrl, deleteFileIfOwnedBy, areFilesOwnedInBucket } from "@/lib/supabase/storage";
 import type { TablesUpdate } from "@/lib/supabase/types";
 
 export const dynamic = "force-dynamic";
@@ -51,6 +51,13 @@ export async function PATCH(request: Request) {
     const ctx = await requireDesigner();
     const body = await request.json().catch(() => null);
     const supabase = createClient();
+
+    // A new avatar must be the caller's OWN upload in the avatars bucket — checked before anything
+    // is written. Never someone else's file, nor a file from a private bucket (which would only ever
+    // render as a broken image). One generic message; it never says whether a foreign file exists.
+    if (typeof body?.avatarFileId === "string" && !(await areFilesOwnedInBucket(supabase, [body.avatarFileId], ctx.user.id, "avatars"))) {
+      return NextResponse.json({ status: "error", message: "That photo couldn't be used. Please upload it again." }, { status: 400 });
+    }
 
     if (typeof body?.displayName === "string" && body.displayName.trim()) {
       const { error } = await supabase.from("users").update({ display_name: body.displayName.trim() }).eq("id", ctx.user.id);

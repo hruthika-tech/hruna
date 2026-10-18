@@ -12,7 +12,13 @@ export interface UploadedImage {
 
 export type UploadBucket = "avatars" | "requestImages" | "diaryImages" | "projectUpdates" | "studioImages" | "verificationDocuments";
 
-export async function uploadImage(file: File, bucket: UploadBucket, entityType: string): Promise<UploadedImage> {
+/** Mirrors app/api/uploads/route.ts's UPLOAD_TYPES allowlist (the server is the real gate). */
+export type UploadEntityType =
+  | "customer_avatar" | "request_image" | "diary_image"
+  | "designer_avatar" | "studio_banner" | "studio_highlight" | "meet_the_designer" | "dress_image"
+  | "previous_creation" | "collection_cover" | "project_update_image" | "portfolio_item";
+
+export async function uploadImage(file: File, bucket: UploadBucket, entityType: UploadEntityType): Promise<UploadedImage> {
   const form = new FormData();
   form.append("file", file);
   form.append("bucket", bucket);

@@ -3,7 +3,8 @@
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { Field, Input } from "@/components/ui/Input";
+import { Field } from "@/components/ui/Input";
+import { PasswordInput } from "@/components/ui/PasswordInput";
 import { Button, LinkButton } from "@/components/ui/Button";
 import { createClient } from "@/lib/supabase/client";
 import { PASSWORD_HINT, validatePasswordConfirmation } from "@/lib/auth/password";
@@ -219,18 +220,16 @@ export function ResetPasswordFlow() {
       <p className="text-sm text-ink-variant mb-8">Choose a new password for your HRUNA account.</p>
       <form onSubmit={onSubmit} className="flex flex-col gap-5" noValidate>
         <Field label="New password" htmlFor="password" required error={errors.password} hint={PASSWORD_HINT}>
-          <Input
+          <PasswordInput
             id="password"
-            type="password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             autoComplete="new-password"
           />
         </Field>
         <Field label="Confirm new password" htmlFor="confirmPassword" required error={errors.confirmPassword}>
-          <Input
+          <PasswordInput
             id="confirmPassword"
-            type="password"
             value={confirmPassword}
             onChange={(e) => setConfirmPassword(e.target.value)}
             autoComplete="new-password"

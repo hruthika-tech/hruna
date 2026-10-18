@@ -28,8 +28,12 @@ function check(label, condition, detail) {
   }
 }
 
+// The DB container of the stack under test (HRUNA_TEST_DB_CONTAINER, as in test-auth-flows.mjs), so a run
+// against another local stack never queries — or attempts writes on — the default one.
+const DB_CONTAINER = process.env.HRUNA_TEST_DB_CONTAINER ?? "supabase_db_lilirve-app";
+
 function sql(query) {
-  return execSync(`docker exec -i supabase_db_lilirve-app psql -U postgres -d postgres -t -A -c "${query.replace(/"/g, '\\"')}"`, {
+  return execSync(`docker exec -i ${DB_CONTAINER} psql -U postgres -d postgres -t -A -c "${query.replace(/"/g, '\\"')}"`, {
     encoding: "utf8",
   }).trim();
 }

@@ -10,6 +10,7 @@ import { Button, LinkButton } from "@/components/ui/Button";
 import { useToast } from "@/hooks/use-toast";
 import { formatCurrency, cn } from "@/lib/utils";
 import type { Dress, Designer } from "@/types";
+import { dressAvailability } from "@/lib/dresses/availability";
 
 // Real data (Phase 7 fix) — this page used to read lib/mock-data.ts entirely, which meant it
 // broke for any real designer's dress (the mock ids don't exist in the real `dresses` table).
@@ -85,6 +86,9 @@ export default function DressDetailsPage() {
     );
   }
 
+  // "Available for purchase" + the designer's stock status, combined by the one shared rule.
+  const availability = dressAvailability(dress);
+
   return (
     <div className="container-editorial py-12 pb-section-gap">
       <div className="grid md:grid-cols-2 gap-12">
@@ -93,8 +97,8 @@ export default function DressDetailsPage() {
             {dress.images[activeImg] && (
               <Image src={dress.images[activeImg]} alt={dress.name} fill className="object-cover" />
             )}
-            {!dress.available && (
-              <span className="absolute top-4 left-4 bg-ink/70 text-white text-xs px-3 py-1.5 rounded-full">Sold</span>
+            {availability.badge && (
+              <span className="absolute top-4 left-4 bg-ink/70 text-white text-xs px-3 py-1.5 rounded-full">{availability.badge}</span>
             )}
           </div>
           {dress.images.length > 1 && (
@@ -124,7 +128,7 @@ export default function DressDetailsPage() {
           {dress.description && <p className="text-ink-variant leading-relaxed mb-6">{dress.description}</p>}
           <div className="flex flex-col gap-2 text-sm mb-8">
             {dress.fabric && <p><span className="text-outline">Fabric: </span>{dress.fabric}</p>}
-            <p><span className="text-outline">Availability: </span>{dress.available ? "In stock" : "Sold — request a similar design"}</p>
+            <p data-testid="dress-availability"><span className="text-outline">Availability: </span>{availability.label}</p>
           </div>
 
           {designer && (
@@ -139,7 +143,8 @@ export default function DressDetailsPage() {
           )}
 
           <div className="flex gap-3">
-            {dress.available ? (
+            {/* Only an orderable dress (available for purchase AND not currently unavailable) can be ordered. */}
+            {availability.orderable ? (
               <Button onClick={contactDesigner} size="lg" className="flex-1" disabled={contacting || !designer}>
                 <MessageCircle size={16} /> {contacting ? "Starting conversation…" : "Contact Designer"}
               </Button>

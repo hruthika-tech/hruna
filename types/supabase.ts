@@ -962,6 +962,7 @@ export type Database = {
           id: string
           name: string
           price: number
+          stock_status: Database["public"]["Enums"]["dress_stock_status"]
           updated_at: string
         }
         Insert: {
@@ -974,6 +975,7 @@ export type Database = {
           id?: string
           name: string
           price?: number
+          stock_status?: Database["public"]["Enums"]["dress_stock_status"]
           updated_at?: string
         }
         Update: {
@@ -986,6 +988,7 @@ export type Database = {
           id?: string
           name?: string
           price?: number
+          stock_status?: Database["public"]["Enums"]["dress_stock_status"]
           updated_at?: string
         }
         Relationships: [
@@ -1246,6 +1249,32 @@ export type Database = {
           {
             foreignKeyName: "messages_sender_id_fkey"
             columns: ["sender_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      notification_reads: {
+        Row: {
+          notification_key: string
+          read_at: string
+          user_id: string
+        }
+        Insert: {
+          notification_key: string
+          read_at?: string
+          user_id: string
+        }
+        Update: {
+          notification_key?: string
+          read_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "notification_reads_user_id_fkey"
+            columns: ["user_id"]
             isOneToOne: false
             referencedRelation: "users"
             referencedColumns: ["id"]
@@ -1849,6 +1878,123 @@ export type Database = {
         }
         Relationships: []
       }
+      user_blocks: {
+        Row: {
+          blocked_id: string
+          blocker_id: string
+          created_at: string
+        }
+        Insert: {
+          blocked_id: string
+          blocker_id: string
+          created_at?: string
+        }
+        Update: {
+          blocked_id?: string
+          blocker_id?: string
+          created_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "user_blocks_blocked_id_fkey"
+            columns: ["blocked_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "user_blocks_blocker_id_fkey"
+            columns: ["blocker_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      user_reports: {
+        Row: {
+          admin_decision: string | null
+          conversation_id: string | null
+          created_at: string
+          description: string | null
+          id: string
+          message_ids: string[]
+          reason: Database["public"]["Enums"]["user_report_reason"]
+          reported_id: string
+          reporter_id: string | null
+          reviewed_at: string | null
+          reviewed_by: string | null
+          status: Database["public"]["Enums"]["user_report_status"]
+          updated_at: string
+        }
+        Insert: {
+          admin_decision?: string | null
+          conversation_id?: string | null
+          created_at?: string
+          description?: string | null
+          id?: string
+          message_ids?: string[]
+          reason: Database["public"]["Enums"]["user_report_reason"]
+          reported_id: string
+          reporter_id?: string | null
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          status?: Database["public"]["Enums"]["user_report_status"]
+          updated_at?: string
+        }
+        Update: {
+          admin_decision?: string | null
+          conversation_id?: string | null
+          created_at?: string
+          description?: string | null
+          id?: string
+          message_ids?: string[]
+          reason?: Database["public"]["Enums"]["user_report_reason"]
+          reported_id?: string
+          reporter_id?: string | null
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          status?: Database["public"]["Enums"]["user_report_status"]
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "user_reports_conversation_id_fkey"
+            columns: ["conversation_id"]
+            isOneToOne: false
+            referencedRelation: "conversation_previews"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "user_reports_conversation_id_fkey"
+            columns: ["conversation_id"]
+            isOneToOne: false
+            referencedRelation: "conversations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "user_reports_reported_id_fkey"
+            columns: ["reported_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "user_reports_reporter_id_fkey"
+            columns: ["reporter_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "user_reports_reviewed_by_fkey"
+            columns: ["reviewed_by"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       user_subscriptions: {
         Row: {
           cancelled_at: string | null
@@ -2047,6 +2193,18 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      can_start_conversation: {
+        Args: { p_customer_id: string; p_designer_id: string }
+        Returns: boolean
+      }
+      conversation_block_state: {
+        Args: { p_conversation_id: string }
+        Returns: string
+      }
+      conversation_other_user: {
+        Args: { p_conversation_id: string }
+        Returns: string
+      }
       current_customer_id: { Args: never; Returns: string }
       current_designer_id: { Args: never; Returns: string }
       is_admin: { Args: never; Returns: boolean }
@@ -2055,12 +2213,28 @@ export type Database = {
         Args: { p_request_id: string }
         Returns: undefined
       }
+      my_blocked_users: {
+        Args: never
+        Returns: {
+          blocked_at: string
+          blocked_id: string
+          display_name: string
+        }[]
+      }
       start_identity_verification: { Args: never; Returns: undefined }
       submit_designer_profile_for_verification: {
         Args: never
         Returns: undefined
       }
       submit_portfolio_for_review: { Args: never; Returns: undefined }
+      user_report_evidence_ok: {
+        Args: {
+          p_conversation_id: string
+          p_message_ids: string[]
+          p_reported_id: string
+        }
+        Returns: boolean
+      }
     }
     Enums: {
       account_status: "active" | "suspended"
@@ -2072,6 +2246,7 @@ export type Database = {
         | "suspended"
       designer_type: "Designer" | "Boutique" | "Tailor"
       dispute_status: "open" | "under_review" | "resolved" | "closed"
+      dress_stock_status: "in_stock" | "made_to_order" | "unavailable"
       identity_status:
         | "not_started"
         | "pending"
@@ -2115,6 +2290,14 @@ export type Database = {
       saved_item_type: "designer" | "dress" | "collection" | "project"
       subscriber_role: "customer" | "designer"
       subscription_status: "none" | "active" | "expired" | "cancelled"
+      user_report_reason:
+        | "harassment"
+        | "scam"
+        | "spam"
+        | "inappropriate"
+        | "impersonation"
+        | "other"
+      user_report_status: "pending" | "under_review" | "resolved" | "dismissed"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -2255,6 +2438,7 @@ export const Constants = {
       ],
       designer_type: ["Designer", "Boutique", "Tailor"],
       dispute_status: ["open", "under_review", "resolved", "closed"],
+      dress_stock_status: ["in_stock", "made_to_order", "unavailable"],
       identity_status: [
         "not_started",
         "pending",
@@ -2303,6 +2487,15 @@ export const Constants = {
       saved_item_type: ["designer", "dress", "collection", "project"],
       subscriber_role: ["customer", "designer"],
       subscription_status: ["none", "active", "expired", "cancelled"],
+      user_report_reason: [
+        "harassment",
+        "scam",
+        "spam",
+        "inappropriate",
+        "impersonation",
+        "other",
+      ],
+      user_report_status: ["pending", "under_review", "resolved", "dismissed"],
     },
   },
 } as const

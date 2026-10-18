@@ -249,6 +249,92 @@ async function main() {
     check("     ...and the other customer's file was never linked by any attempt above", foreignEverLinked === "0", { foreignEverLinked });
   }
 
+  console.log("\n=== 15. Upload entityType is allowlisted, pinned to its bucket and role, path built server-side ===");
+  {
+    const uploadRaw = async (cookie, fields) => {
+      const form = new FormData();
+      form.append("file", new Blob([PNG_BYTES], { type: "image/png" }), "t.png");
+      for (const [k, v] of Object.entries(fields)) if (v !== undefined) form.append(k, v);
+      const res = await fetch(`${APP_URL}/api/uploads`, { method: "POST", headers: { cookie }, body: form });
+      return { status: res.status, data: await res.json().catch(() => ({})) };
+    };
+    const ids = Object.fromEntries(
+      sql("select email || '=' || id from auth.users where email in ('aanya@lilirve.dev','meera@lilirve.dev');").split("\n").map((l) => l.split("="))
+    );
+    const bucketIds = { avatars: "avatars", requestImages: "request-images", diaryImages: "diary-images", projectUpdates: "project-updates", studioImages: "studio-images", verificationDocuments: "verification-documents" };
+
+    const VALID = [
+      ["customer_avatar", "avatars", aanya, "aanya@lilirve.dev"],
+      ["request_image", "requestImages", aanya, "aanya@lilirve.dev"],
+      ["diary_image", "diaryImages", aanya, "aanya@lilirve.dev"],
+      ["designer_avatar", "avatars", meera, "meera@lilirve.dev"],
+      ["studio_banner", "studioImages", meera, "meera@lilirve.dev"],
+      ["studio_highlight", "studioImages", meera, "meera@lilirve.dev"],
+      ["meet_the_designer", "studioImages", meera, "meera@lilirve.dev"],
+      ["dress_image", "studioImages", meera, "meera@lilirve.dev"],
+      ["previous_creation", "studioImages", meera, "meera@lilirve.dev"],
+      ["collection_cover", "studioImages", meera, "meera@lilirve.dev"],
+      ["project_update_image", "projectUpdates", meera, "meera@lilirve.dev"],
+      ["portfolio_item", "verificationDocuments", meera, "meera@lilirve.dev"],
+    ];
+    for (const [type, bucket, who, email] of VALID) {
+      const r = await uploadRaw(who, { bucket, entityType: type });
+      const row = r.data.fileId
+        ? sql(`select entity_type || '|' || bucket_id || '|' || storage_path from public.files where id = '${r.data.fileId}';`).split("|")
+        : [];
+      const pathOk = (row[2] ?? "").startsWith(`${ids[email]}/${type}/`) && /^[0-9a-f-]{36}\.png$/.test((row[2] ?? "").split("/")[2] ?? "");
+      check(`15a. ${type} → ${bucket}: accepted, stored with that type/bucket under the uploader's own path`, r.status === 200 && row[0] === type && row[1] === bucketIds[bucket] && pathOk, { status: r.status, row });
+    }
+
+    const before = sql("select count(*) from public.files;");
+    const BAD_TYPES = [
+      ["missing", undefined],
+      ["empty", ""],
+      ["the old default 'upload'", "upload"],
+      ["unknown", "profile_banner"],
+      ["path traversal", "../meera"],
+      ["nested path", "customer_avatar/../../x"],
+      ["wrong case", "CUSTOMER_AVATAR"],
+      ["prototype key", "__proto__"],
+      ["inherited key", "toString"],
+    ];
+    for (const [label, entityType] of BAD_TYPES) {
+      const r = await uploadRaw(aanya, { bucket: "avatars", entityType });
+      check(`15b. ${label} entityType → 400`, r.status === 400 && r.data.message === "Unknown or unsupported upload type.", r);
+    }
+
+    const MISMATCH = [
+      ["a request image into the public avatars bucket", "request_image", "avatars"],
+      ["an avatar into the private request-images bucket", "customer_avatar", "requestImages"],
+      ["a diary-bucket file labelled request_image (would gain request visibility)", "request_image", "diaryImages"],
+      ["a project-update label on a request image", "project_update_image", "requestImages"],
+      ["no bucket at all", "customer_avatar", undefined],
+    ];
+    for (const [label, entityType, bucket] of MISMATCH) {
+      const r = await uploadRaw(entityType === "project_update_image" ? meera : aanya, { bucket, entityType });
+      check(`15c. Rejects ${label} → 400`, r.status === 400 && r.data.message === "That upload type doesn't belong in that location.", r);
+    }
+
+    const customerAsDesigner = await uploadRaw(aanya, { bucket: "studioImages", entityType: "studio_highlight" });
+    check("15d. A customer (no designer profile) can't upload studio images → 403", customerAsDesigner.status === 403, customerAsDesigner);
+    const customerDesignerAvatar = await uploadRaw(aanya, { bucket: "avatars", entityType: "designer_avatar" });
+    check("     …nor a designer avatar → 403", customerDesignerAvatar.status === 403, customerDesignerAvatar);
+    const customerPortfolio = await uploadRaw(aanya, { bucket: "verificationDocuments", entityType: "portfolio_item" });
+    check("     …nor verification/portfolio documents → 403", customerPortfolio.status === 403, customerPortfolio);
+    const pendingDesigner = await uploadRaw(ramesh, { bucket: "studioImages", entityType: "studio_highlight" });
+    check("15e. A pending designer (has a designer profile) can still upload studio images", pendingDesigner.status === 200, pendingDesigner);
+    const admin = await signIn("admin@lilirve.dev");
+    const adminCustomer = await uploadRaw(admin, { bucket: "avatars", entityType: "customer_avatar" });
+    check("15f. An admin can't upload as a customer → 403", adminCustomer.status === 403, adminCustomer);
+    const adminDesigner = await uploadRaw(admin, { bucket: "studioImages", entityType: "studio_banner" });
+    check("     …nor as a designer → 403", adminDesigner.status === 403, adminDesigner);
+    const anon = await uploadRaw("", { bucket: "avatars", entityType: "customer_avatar" });
+    check("15g. Unauthenticated → 401 (checked before anything else)", anon.status === 401, anon);
+
+    const after = sql("select count(*) from public.files;");
+    check("15h. None of the rejected attempts created a files row (only the one allowed pending-designer upload)", Number(after) === Number(before) + 1, { before, after });
+  }
+
   console.log(`\n${pass} passed, ${fail} failed.`);
   if (fail > 0) {
     console.log("Failed:", failures.join(", "));

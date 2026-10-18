@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { BlockedUsersPanel } from "@/components/profile/BlockedUsersPanel";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import {
@@ -33,6 +34,7 @@ const TABS = [
   { label: "Personal Details", value: "personal" },
   { label: "Security", value: "security" },
   { label: "Notifications", value: "notifications" },
+  { label: "Blocked users", value: "blocked" },
 ];
 
 // The old "Privacy" tab (a static, always-checked, disabled checkbox — not a real setting) has been
@@ -79,6 +81,10 @@ export default function ProfilePage() {
   const router = useRouter();
   const { push } = useToast();
   const [tab, setTab] = useState("personal");
+  // Settings → Blocked users can be linked to directly (?tab=blocked), e.g. from a blocked conversation.
+  useEffect(() => {
+    if (new URLSearchParams(window.location.search).get("tab") === "blocked") setTab("blocked");
+  }, []);
 
   const [status, setStatus] = useState<"loading" | "error" | "ready">("loading");
   const [error, setError] = useState("");
@@ -318,6 +324,7 @@ export default function ProfilePage() {
           </div>
         )}
 
+        {tab === "blocked" && <BlockedUsersPanel />}
         {tab === "notifications" && notifPrefs && (
           <div className="flex flex-col gap-4">
             {(Object.entries(notifPrefs) as [keyof NotificationPreferences, boolean][]).map(([key, value]) => (

@@ -6,14 +6,15 @@
  * user can write to — this route doesn't re-decide that, it just uploads as the calling user and
  * lets Storage accept or reject it.
  *
- * Every object is written under `${user.id}/${entityType}/...` — the exact path-prefix convention
- * every bucket's storage.objects INSERT policy already requires.
+ * Every object is written under `${user.id}/${entityType}/<random uuid>.<ext>` — built entirely
+ * server-side (the user id from the session, the entity type only from the allowlist below), which
+ * is the exact path-prefix convention every bucket's storage.objects INSERT policy requires.
  */
 
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import { requireUser } from "@/lib/supabase/authorization";
-import { errorResponse } from "@/lib/supabase/errors";
+import { assertNotAdmin, requireUser } from "@/lib/supabase/authorization";
+import { AuthorizationError, errorResponse } from "@/lib/supabase/errors";
 import { STORAGE_BUCKETS, getPublicFileUrl, type StorageBucketKey } from "@/lib/supabase/storage";
 import type { TablesInsert } from "@/lib/supabase/types";
 
@@ -36,13 +37,55 @@ const ALLOWED_BUCKETS: StorageBucketKey[] = [
   "verificationDocuments",
 ];
 
+// Every legitimate upload category in the app, each pinned to the ONE bucket its flow uses and the
+// role allowed to make it. files.entity_type is not just a label — files_select RLS grants other
+// users read access by it ('request_image', 'project_update_image'), so a client must never be able
+// to pick a type that doesn't match the bucket/role (e.g. call a diary image a request image).
+//   customer — any non-admin signed-in user (a customer profile may not exist yet: onboarding's
+//              avatar and the new-request form upload before it's created);
+//   designer — the caller must have a designer profile (designer onboarding creates it first).
+// Admin accounts never upload as a customer or designer (role separation — see assertNotAdmin).
+const UPLOAD_TYPES = {
+  customer_avatar: { bucket: "avatars", role: "customer" },
+  request_image: { bucket: "requestImages", role: "customer" },
+  diary_image: { bucket: "diaryImages", role: "customer" },
+  designer_avatar: { bucket: "avatars", role: "designer" },
+  studio_banner: { bucket: "studioImages", role: "designer" },
+  studio_highlight: { bucket: "studioImages", role: "designer" },
+  meet_the_designer: { bucket: "studioImages", role: "designer" },
+  dress_image: { bucket: "studioImages", role: "designer" },
+  previous_creation: { bucket: "studioImages", role: "designer" },
+  collection_cover: { bucket: "studioImages", role: "designer" },
+  project_update_image: { bucket: "projectUpdates", role: "designer" },
+  portfolio_item: { bucket: "verificationDocuments", role: "designer" },
+} as const satisfies Record<string, { bucket: StorageBucketKey; role: "customer" | "designer" }>;
+type UploadType = keyof typeof UPLOAD_TYPES;
+
+function isUploadType(value: unknown): value is UploadType {
+  return typeof value === "string" && Object.prototype.hasOwnProperty.call(UPLOAD_TYPES, value);
+}
+
 export async function POST(request: Request) {
   try {
     const ctx = await requireUser();
     const form = await request.formData();
     const file = form.get("file");
     const bucketKey = form.get("bucket") as StorageBucketKey | null;
-    const entityType = typeof form.get("entityType") === "string" ? (form.get("entityType") as string) : "upload";
+    const entityType = form.get("entityType");
+
+    if (!isUploadType(entityType)) {
+      return NextResponse.json({ status: "error", message: "Unknown or unsupported upload type." }, { status: 400 });
+    }
+    const uploadType = UPLOAD_TYPES[entityType];
+    if (bucketKey !== uploadType.bucket) {
+      return NextResponse.json({ status: "error", message: "That upload type doesn't belong in that location." }, { status: 400 });
+    }
+    // Role gate for the type (403 via errorResponse): admins never; designer types need a designer
+    // profile — same rule and message as requireDesigner(), using the context already resolved.
+    assertNotAdmin(ctx);
+    if (uploadType.role === "designer" && !ctx.designerId) {
+      throw new AuthorizationError("A designer profile is required for this action.", 403);
+    }
 
     if (!(file instanceof File)) {
       return NextResponse.json({ status: "error", message: "No file was provided." }, { status: 400 });

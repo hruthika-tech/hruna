@@ -2,17 +2,17 @@
 
 import { useEffect, useState } from "react";
 import Image from "next/image";
-import Link from "next/link";
 import { Plus, Pencil, Trash2, Loader2, Camera } from "lucide-react";
 import { Tabs } from "@/components/ui/Tabs";
 import { Button } from "@/components/ui/Button";
 import { Modal } from "@/components/ui/Modal";
-import { Field, Input, Textarea } from "@/components/ui/Input";
+import { Field, Input, Select, Textarea } from "@/components/ui/Input";
 import { UploadingImageGrid } from "@/components/ui/UploadingImageGrid";
 import { SafeImage } from "@/components/ui/SafeImage";
 import { Badge } from "@/components/ui/Badge";
 import { useToast } from "@/hooks/use-toast";
 import { formatCurrency } from "@/lib/utils";
+import { STOCK_STATUS_OPTIONS, dressAvailability, type StockStatus } from "@/lib/dresses/availability";
 import { CollectionCoverUpload, type CoverValue } from "@/components/designer/CollectionCoverUpload";
 import { deleteUnusedImage, type UploadedImage } from "@/lib/customer/upload-client";
 
@@ -27,7 +27,7 @@ const TABS = [
 interface Highlight { id: string; image: string; caption: string }
 interface MeetEntry { id: string; image: string; description: string }
 interface Collection { id: string; name: string; category: string; coverImage: string; dressIds: string[] }
-interface Dress { id: string; collectionId: string; name: string; images: string[]; imageFiles?: UploadedImage[]; description: string; price: number; available: boolean }
+interface Dress { id: string; collectionId: string; name: string; images: string[]; imageFiles?: UploadedImage[]; description: string; price: number; available: boolean; stockStatus?: StockStatus }
 interface PreviousCreation { id: string; image: string; description: string; year: string }
 interface DesignerBundle {
   id: string;
@@ -60,7 +60,7 @@ export default function ManageStudioPage() {
   const [collectionError, setCollectionError] = useState("");
   const [coverError, setCoverError] = useState("");
   const [coverUploading, setCoverUploading] = useState(false);
-  const [dressModal, setDressModal] = useState<{ collectionId: string; id: string | null; name: string; images: UploadedImage[]; description: string; price: string; available: boolean } | null>(null);
+  const [dressModal, setDressModal] = useState<{ collectionId: string; id: string | null; name: string; images: UploadedImage[]; description: string; price: string; available: boolean; stockStatus: StockStatus } | null>(null);
   const [dressError, setDressError] = useState("");
   const [creationModal, setCreationModal] = useState<{ id: string | null; image: UploadedImage | null; description: string; year: string } | null>(null);
   const [info, setInfo] = useState({ contactEmail: "", openingHours: "", atelierLocation: "", experienceYears: "" });
@@ -263,23 +263,28 @@ export default function ManageStudioPage() {
     }
     setDressError("");
     setSaving(true);
+    let stockStatusSaved = true;
     try {
       const imageFileIds = dressModal.images.map((i) => i.fileId);
       if (dressModal.id) {
         const data = await call(`/api/designer/studio/dresses/${dressModal.id}`, {
           method: "PATCH",
-          body: JSON.stringify({ name: dressModal.name, description: dressModal.description, price: Number(dressModal.price), available: dressModal.available, imageFileIds }),
+          body: JSON.stringify({ name: dressModal.name, description: dressModal.description, price: Number(dressModal.price), available: dressModal.available, stockStatus: dressModal.stockStatus, imageFileIds }),
         });
         setDresses((prev) => prev.map((d) => (d.id === dressModal.id ? data.dress : d)));
+        stockStatusSaved = data.stockStatusSaved !== false;
       } else {
         const data = await call("/api/designer/studio/dresses", {
           method: "POST",
-          body: JSON.stringify({ collectionId: dressModal.collectionId, name: dressModal.name, description: dressModal.description, price: Number(dressModal.price), available: dressModal.available, imageFileIds }),
+          body: JSON.stringify({ collectionId: dressModal.collectionId, name: dressModal.name, description: dressModal.description, price: Number(dressModal.price), available: dressModal.available, stockStatus: dressModal.stockStatus, imageFileIds }),
         });
         setDresses((prev) => [...prev, data.dress]);
+        stockStatusSaved = data.stockStatusSaved !== false;
       }
       setDressModal(null);
-      push("Dress saved.");
+      // Only when the database doesn't have stock statuses yet (migration 20261019000001 not applied).
+      if (stockStatusSaved) push("Dress saved.");
+      else push("Dress saved, but its availability couldn't be stored yet — it shows as in stock until the server is updated.", "error");
     } catch (err) {
       setDressError(err instanceof Error ? err.message : "Couldn't save this dress.");
     } finally {
@@ -393,10 +398,7 @@ export default function ManageStudioPage() {
   return (
     <div className="container-editorial py-12 pb-section-gap">
       <p className="text-label-md text-outline mb-2">MANAGE STUDIO</p>
-      <div className="flex items-end justify-between gap-4 flex-wrap mb-8">
-        <h1 className="text-headline-md">{designer.studioName}</h1>
-        <Link href={`/studio/${designer.id}`} className="text-sm text-primary hover:underline">View public profile →</Link>
-      </div>
+      <h1 className="text-headline-md mb-8">{designer.studioName}</h1>
 
       <div className="relative h-48 md:h-64 rounded-md overflow-hidden mb-10 group">
         <SafeImage src={designer.banner} alt={`${designer.studioName} banner`} sizes="100vw" className="object-cover" fallbackIconSize={28} />
@@ -497,7 +499,7 @@ export default function ManageStudioPage() {
                     <div className="flex items-center gap-2 flex-wrap">
                       <Button size="sm" variant="secondary" onClick={() => openCollectionModal(c)}><Pencil size={13} /> Edit</Button>
                       <Button size="sm" variant="danger" onClick={() => deleteCollection(c.id)}><Trash2 size={13} /> Delete</Button>
-                      <Button size="sm" onClick={() => { setDressError(""); setDressModal({ collectionId: c.id, id: null, name: "", images: [], description: "", price: "", available: true }); }}>
+                      <Button size="sm" onClick={() => { setDressError(""); setDressModal({ collectionId: c.id, id: null, name: "", images: [], description: "", price: "", available: true, stockStatus: "in_stock" }); }}>
                         <Plus size={13} /> Add Dress
                       </Button>
                     </div>
@@ -507,14 +509,16 @@ export default function ManageStudioPage() {
                       <div key={d.id} className="border border-outline-variant rounded-sm overflow-hidden relative">
                         <div className="relative h-40">
                           {d.images[0] && <Image src={d.images[0]} alt={d.name} fill sizes="25vw" className="object-cover" />}
-                          {!d.available && <span className="absolute top-2 left-2 bg-ink/70 text-white text-[10px] px-2 py-0.5 rounded-full">Unavailable</span>}
+                          {dressAvailability(d).badge && (
+                            <span className="absolute top-2 left-2 bg-ink/70 text-white text-[10px] px-2 py-0.5 rounded-full" data-testid="dress-badge">{dressAvailability(d).badge}</span>
+                          )}
                         </div>
                         <div className="p-3">
                           <p className="text-sm font-medium truncate">{d.name}</p>
                           <p className="text-primary text-xs mt-0.5">{formatCurrency(d.price)}</p>
                           <div className="flex gap-2 mt-2">
                             <button
-                              onClick={() => { setDressError(""); setDressModal({ collectionId: c.id, id: d.id, name: d.name, images: d.imageFiles ?? [], description: d.description, price: String(d.price), available: d.available }); }}
+                              onClick={() => { setDressError(""); setDressModal({ collectionId: c.id, id: d.id, name: d.name, images: d.imageFiles ?? [], description: d.description, price: String(d.price), available: d.available, stockStatus: d.stockStatus ?? "in_stock" }); }}
                               className="text-xs text-primary flex items-center gap-1"
                             >
                               <Pencil size={11} />Edit
@@ -678,6 +682,13 @@ export default function ManageStudioPage() {
             </Field>
             <Field label="Description" htmlFor="dDesc"><Textarea id="dDesc" value={dressModal.description} onChange={(e) => setDressModal((d) => d && { ...d, description: e.target.value })} /></Field>
             <Field label="Price (₹)" htmlFor="dPrice" required><Input id="dPrice" type="number" value={dressModal.price} onChange={(e) => setDressModal((d) => d && { ...d, price: e.target.value })} /></Field>
+            <Field label="Availability" htmlFor="dStock" hint="What customers see on this dress: whether it's ready now, made for them, or not available at the moment.">
+              <Select id="dStock" value={dressModal.stockStatus} onChange={(e) => setDressModal((d) => d && { ...d, stockStatus: e.target.value as StockStatus })}>
+                {STOCK_STATUS_OPTIONS.map((o) => (
+                  <option key={o.value} value={o.value}>{o.label}</option>
+                ))}
+              </Select>
+            </Field>
             <label className="flex items-center gap-2 text-sm">
               <input type="checkbox" checked={dressModal.available} onChange={(e) => setDressModal((d) => d && { ...d, available: e.target.checked })} />
               Available for purchase

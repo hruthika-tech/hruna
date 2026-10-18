@@ -5,8 +5,12 @@
  */
 
 import { NextResponse } from "next/server";
+import { createClient as createSupabaseClient } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/server";
 import { errorResponse } from "@/lib/supabase/errors";
+import { supabaseConfig } from "@/lib/supabase/config";
+import type { Database } from "@/lib/supabase/types";
+import { roleHomePath } from "@/lib/auth/routes";
 
 export const dynamic = "force-dynamic";
 
@@ -23,7 +27,7 @@ export async function POST(request: Request) {
     }
 
     const supabase = createClient();
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
+    const { data: signIn, error } = await supabase.auth.signInWithPassword({ email, password });
     if (error) {
       if (error.code === "email_not_confirmed") {
         return NextResponse.json(
@@ -40,11 +44,22 @@ export async function POST(request: Request) {
       throw error;
     }
 
-    // ADMIN always lands in the admin area, whatever `?next=` the login page carried (a public
-    // page like /discover wouldn't be caught by the middleware's admin redirect). Resolved from
-    // the same trusted is_admin() SQL helper as everywhere else, using the session just created.
-    const { data: isAdmin } = await supabase.rpc("is_admin");
-    return NextResponse.json({ status: "ok", redirectTo: isAdmin ? "/admin" : null });
+    // Route by the VERIFIED role of the account that just signed in. The role RPCs run with a client
+    // authorised by the access token sign-in just returned, so they evaluate as THIS user — never a
+    // stale/anonymous view of the request's cookies. Same trusted SQL helpers RLS itself uses.
+    //   redirectTo — forced destination (admins always land in /admin, whatever `?next=` says)
+    //   home       — the role's default destination when no explicit `?next=` was given
+    const asUser = createSupabaseClient<Database>(supabaseConfig.url(), supabaseConfig.anonKey(), {
+      auth: { persistSession: false, autoRefreshToken: false },
+      global: { headers: { Authorization: `Bearer ${signIn.session?.access_token ?? ""}` } },
+    });
+    const [{ data: isAdmin }, { data: customerId }, { data: designerId }] = await Promise.all([
+      asUser.rpc("is_admin"),
+      asUser.rpc("current_customer_id"),
+      asUser.rpc("current_designer_id"),
+    ]);
+    const home = roleHomePath({ isAdmin: !!isAdmin, hasCustomerProfile: !!customerId, hasDesignerProfile: !!designerId });
+    return NextResponse.json({ status: "ok", redirectTo: isAdmin ? "/admin" : null, home });
   } catch (err) {
     return errorResponse(err, "api.auth.login");
   }

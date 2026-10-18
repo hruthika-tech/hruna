@@ -1,0 +1,5 @@
+<h2>Confirm your HRUNA email change</h2>
+<p>We received a request to change the email address for your HRUNA account from <strong>{{ .Email }}</strong> to <strong>{{ .NewEmail }}</strong>.</p>
+<p>Click below to confirm the change:</p>
+<p><a href="{{ .SiteURL }}/auth/confirm?token_hash={{ .TokenHash }}&type=email_change">Confirm email change</a></p>
+<p>For your security, a link like this is sent to both your current and your new address — the change completes once both are confirmed. This link expires shortly and can only be used once. If you didn't request this, ignore this email and your address will stay the same.</p>

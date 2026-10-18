@@ -247,6 +247,9 @@ export function mapDress(row: Tables<"dresses">, images: ResolvedImage[]) {
     description: row.description ?? "",
     price: Number(row.price),
     available: row.available,
+    // Missing only on a database without 20261019000001_dress_stock_status — treated as in stock,
+    // which is what customers were shown before stock statuses existed.
+    stockStatus: row.stock_status ?? "in_stock",
     fabric: row.fabric ?? "",
   };
 }

@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { Bell, MessageSquare, CheckCircle2, Inbox, Star, ShieldCheck, Loader2 } from "lucide-react";
 import { cn, timeAgo } from "@/lib/utils";
+import { saveNotificationRead } from "@/lib/badges/client";
 
 type NotificationType = "request" | "completion" | "review" | "verification";
 
@@ -13,6 +14,7 @@ interface Notification {
   text: string;
   href: string;
   timestamp: string;
+  read?: boolean;
 }
 
 const ICONS: Record<NotificationType, any> = { request: Inbox, completion: CheckCircle2, review: Star, verification: ShieldCheck };
@@ -20,12 +22,14 @@ const ICONS: Record<NotificationType, any> = { request: Inbox, completion: Check
 // Real data (Phase 9 fix) — same disconnection as the customer notifications page: a hardcoded
 // local array of fake events with broken mock-id links. Now reads a real, timestamp-sorted feed
 // built from this designer's own requests/projects/reviews/verification status (see
-// app/api/designer/notifications). "Read" state stays exactly as ephemeral as the original mock's
-// own behavior — local UI state only, not persisted.
+// app/api/designer/notifications). Opening an item marks just that item read; it's saved per user
+// (public.notification_reads) and the navbar badge updates. Opening this page doesn't mark anything.
+// Without read tracking in the database, read state lasts for the visit.
 export default function DesignerNotificationsPage() {
   const [status, setStatus] = useState<"loading" | "error" | "ready">("loading");
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [readIds, setReadIds] = useState<Set<string>>(new Set());
+  const [tracked, setTracked] = useState(false);
 
   useEffect(() => {
     (async () => {
@@ -34,6 +38,8 @@ export default function DesignerNotificationsPage() {
         const data = await res.json();
         if (!res.ok) throw new Error(data.message ?? "Couldn't load notifications.");
         setNotifications(data.notifications);
+        setReadIds(new Set((data.notifications as Notification[]).filter((n) => n.read).map((n) => n.id)));
+        setTracked(data.readTracking === true);
         setStatus("ready");
       } catch {
         setStatus("error");
@@ -41,7 +47,11 @@ export default function DesignerNotificationsPage() {
     })();
   }, []);
 
-  const markRead = (id: string) => setReadIds((prev) => new Set(prev).add(id));
+  const markRead = (id: string) => {
+    if (readIds.has(id)) return;
+    setReadIds((prev) => new Set(prev).add(id));
+    if (tracked) void saveNotificationRead(id);
+  };
 
   return (
     <div className="container-narrow py-12 pb-section-gap">

@@ -45,6 +45,11 @@ function NewRequestPageContent() {
   const [submitted, setSubmitted] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState("");
+  // Set when the API says this account has no customer profile yet. Nothing was saved; the form keeps
+  // everything typed and offers ONE explicit action that creates the profile from the details given
+  // at registration (no re-entry) and then sends this same request.
+  const [needsProfile, setNeedsProfile] = useState(false);
+  const [settingUpProfile, setSettingUpProfile] = useState(false);
   const [form, setForm] = useState({
     title: "",
     category: CATEGORIES[0],
@@ -90,6 +95,25 @@ function NewRequestPageContent() {
     if (step < STEPS.length - 1) setStep(step + 1);
   };
 
+  const setUpProfileAndSend = async () => {
+    setSettingUpProfile(true);
+    setSubmitError("");
+    try {
+      // No fields sent: the server uses the registration name for a new profile (or keeps an
+      // existing one), always linked to the signed-in user — never anyone else's.
+      const res = await fetch("/api/profile/customer", { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message ?? "Couldn't set up your customer profile.");
+      setNeedsProfile(false);
+    } catch (err) {
+      setSubmitError(err instanceof Error ? err.message : "Couldn't set up your customer profile.");
+      setSettingUpProfile(false);
+      return;
+    }
+    setSettingUpProfile(false);
+    await handleSubmit();
+  };
+
   const handleSubmit = async () => {
     setSubmitError("");
     setSubmitting(true);
@@ -131,8 +155,13 @@ function NewRequestPageContent() {
         }),
       });
       const data = await res.json();
+      if (res.status === 403 && data.code === "customer_profile_required") {
+        setNeedsProfile(true);
+        return;
+      }
       if (!res.ok) throw new Error(data.message ?? "Something went wrong. Please try again.");
 
+      setNeedsProfile(false);
       setSubmitted(true);
       push("Your fashion request has been sent to designers.", "success");
     } catch (err) {
@@ -271,6 +300,18 @@ function NewRequestPageContent() {
                     </div>
                   ))}
                 </div>
+              </div>
+            )}
+            {needsProfile && (
+              <div role="alert" className="flex flex-col gap-3 rounded-md border border-outline-variant bg-surface-low p-4">
+                <p className="text-sm text-ink-variant">
+                  Your request hasn&apos;t been sent yet — requests are made from a customer profile, and this account
+                  doesn&apos;t have one. We&apos;ll create it using the name you registered with; everything you entered
+                  here stays as it is.
+                </p>
+                <Button type="button" size="sm" className="w-fit" onClick={setUpProfileAndSend} disabled={settingUpProfile || submitting}>
+                  {settingUpProfile || submitting ? "Sending…" : "Create my customer profile & send request"}
+                </Button>
               </div>
             )}
             {submitError && <p className="text-sm text-error">{submitError}</p>}

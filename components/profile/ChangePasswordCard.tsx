@@ -1,7 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { Field, Input } from "@/components/ui/Input";
+import { Field } from "@/components/ui/Input";
+import { PasswordInput } from "@/components/ui/PasswordInput";
 import { Button } from "@/components/ui/Button";
 import { PASSWORD_HINT, validatePasswordConfirmation } from "@/lib/auth/password";
 import { useToast } from "@/hooks/use-toast";
@@ -55,27 +56,24 @@ export function ChangePasswordCard() {
       <p className="text-xs text-ink-variant mb-5">Update the password you use to sign in to HRUNA.</p>
       <form onSubmit={onSubmit} className="flex flex-col gap-4 max-w-sm" noValidate>
         <Field label="Current password" htmlFor="currentPassword" required error={errors.currentPassword}>
-          <Input
+          <PasswordInput
             id="currentPassword"
-            type="password"
             value={form.currentPassword}
             onChange={(e) => update("currentPassword", e.target.value)}
             autoComplete="current-password"
           />
         </Field>
         <Field label="New password" htmlFor="newPassword" required error={errors.newPassword} hint={PASSWORD_HINT}>
-          <Input
+          <PasswordInput
             id="newPassword"
-            type="password"
             value={form.newPassword}
             onChange={(e) => update("newPassword", e.target.value)}
             autoComplete="new-password"
           />
         </Field>
         <Field label="Confirm new password" htmlFor="confirmPassword" required error={errors.confirmPassword}>
-          <Input
+          <PasswordInput
             id="confirmPassword"
-            type="password"
             value={form.confirmPassword}
             onChange={(e) => update("confirmPassword", e.target.value)}
             autoComplete="new-password"

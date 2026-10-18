@@ -11,6 +11,8 @@ import { createClient } from "@/lib/supabase/server";
 import { requireUser } from "@/lib/supabase/authorization";
 import { errorResponse } from "@/lib/supabase/errors";
 import type { TablesInsert } from "@/lib/supabase/types";
+import { chatBlockState } from "@/lib/moderation/reports";
+import { conversationBlockState } from "@/lib/moderation/server";
 
 export const dynamic = "force-dynamic";
 
@@ -50,8 +52,10 @@ export async function GET(_request: Request, { params }: { params: { id: string 
       text: m.text,
       timestamp: m.created_at,
     }));
+    // none | blocked_by_me | unavailable — the blocked side is never told who blocked whom.
+    const blockState = chatBlockState(await conversationBlockState(supabase, params.id));
 
-    return NextResponse.json({ status: "ok", messages });
+    return NextResponse.json({ status: "ok", messages, blockState });
   } catch (err) {
     return errorResponse(err, "api.conversations.messages.list");
   }
@@ -67,6 +71,20 @@ export async function POST(request: Request, { params }: { params: { id: string 
     }
 
     const supabase = createClient();
+    // A block in either direction stops sending. Checked here for a clear answer; the
+    // messages_insert_participant policy enforces the same rule in the database regardless.
+    const state = chatBlockState(await conversationBlockState(supabase, params.id));
+    if (state !== "none") {
+      return NextResponse.json(
+        {
+          status: "error",
+          code: "messaging_blocked",
+          blockState: state,
+          message: state === "blocked_by_me" ? "You've blocked this person. Unblock them in Settings to message again." : "You can't send messages in this conversation.",
+        },
+        { status: 403 }
+      );
+    }
     const insert: TablesInsert<"messages"> = {
       conversation_id: params.id,
       sender_id: ctx.user.id,

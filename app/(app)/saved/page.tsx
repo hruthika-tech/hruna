@@ -12,6 +12,7 @@ import { SaveToggleButton } from "@/components/ui/SaveToggleButton";
 import { LinkButton } from "@/components/ui/Button";
 import { subscribeToSavedItems, getSavedItemsSnapshot } from "@/lib/customer/saved-items-client";
 import { formatCurrency } from "@/lib/utils";
+import { DressAvailabilityNote } from "@/components/dresses/DressAvailabilityNote";
 import type { Designer, Dress, Collection, Project } from "@/types";
 
 const TABS = [
@@ -138,6 +139,7 @@ export default function SavedItemsPage() {
                       <CardBody>
                         <p className="text-sm font-medium truncate">{dress.name}</p>
                         <p className="text-primary text-sm mt-1">{formatCurrency(dress.price)}</p>
+                        <DressAvailabilityNote dress={dress} />
                       </CardBody>
                     </Card>
                   ))}

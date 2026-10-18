@@ -9,6 +9,8 @@ import { createClient } from "@/lib/supabase/server";
 import { getAuthContext } from "@/lib/supabase/authorization";
 import { listApprovedDesigners, listCollections, listDresses } from "@/lib/customer/discovery";
 import { formatCurrency } from "@/lib/utils";
+import { DressAvailabilityNote } from "@/components/dresses/DressAvailabilityNote";
+import { dressAvailability } from "@/lib/dresses/availability";
 
 // Real data (Phase 7 fix) — this page used to read lib/mock-data.ts entirely; it now reads the
 // same real designer_profiles/collections/dresses rows the public Studio page and Discover use,
@@ -114,13 +116,14 @@ export default async function CustomerHomePage() {
                 <Card hover>
                   <div className="relative h-72 overflow-hidden">
                     {d.images[0] && <Image src={d.images[0]} alt={d.name} fill sizes="(max-width: 768px) 50vw, 25vw" className="object-cover" />}
-                    {!d.available && (
-                      <span className="absolute top-3 left-3 bg-ink/70 text-white text-xs px-3 py-1 rounded-full">Sold</span>
+                    {dressAvailability(d).badge && (
+                      <span className="absolute top-3 left-3 bg-ink/70 text-white text-xs px-3 py-1 rounded-full">{dressAvailability(d).badge}</span>
                     )}
                   </div>
                   <div className="p-4">
                     <p className="font-medium text-sm truncate">{d.name}</p>
                     <p className="text-primary text-sm mt-1">{formatCurrency(d.price)}</p>
+                    <DressAvailabilityNote dress={d} />
                   </div>
                 </Card>
               </Link>

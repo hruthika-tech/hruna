@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
 import { Camera, MapPin, Loader2 } from "lucide-react";
@@ -35,6 +35,29 @@ export default function OnboardingPage() {
   const [categories, setCategories] = useState<string[]>([]);
   const [occasions, setOccasions] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
+  const [hasProfile, setHasProfile] = useState(false);
+
+  // Never ask for what we already have: load an EXISTING customer profile (so this page edits it),
+  // otherwise prefill the name the user gave at registration. Read-only — nothing navigates here.
+  useEffect(() => {
+    (async () => {
+      try {
+        const profileRes = await fetch("/api/profile/customer");
+        const profileData = profileRes.ok ? await profileRes.json() : null;
+        if (profileData?.customerProfile) {
+          setHasProfile(true);
+          setName((n) => n || profileData.customerProfile.name || "");
+          setCity((c) => c || profileData.customerProfile.city || "");
+          return;
+        }
+        const session = await (await fetch("/api/auth/session")).json();
+        if (session?.name) setName((n) => n || session.name);
+      } catch {
+        // Prefill is a convenience only — the fields stay editable and the server still falls
+        // back to the registration name if none is sent.
+      }
+    })();
+  }, []);
 
   const toggle = (list: string[], setList: (v: string[]) => void, value: string) => {
     setList(list.includes(value) ? list.filter((v) => v !== value) : [...list, value]);
@@ -63,9 +86,11 @@ export default function OnboardingPage() {
       const res = await fetch("/api/profile/customer", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        // Only send what's filled in: an empty name falls back (server-side) to the existing profile's
+        // name or the registration name; an empty city never wipes one already saved.
         body: JSON.stringify({
-          name: name.trim() || "HRUNA Customer",
-          city: city.trim(),
+          ...(name.trim() ? { name: name.trim() } : {}),
+          ...(city.trim() ? { city: city.trim() } : {}),
           ...(avatarFileId ? { avatarFileId } : {}),
         }),
       });
@@ -97,8 +122,12 @@ export default function OnboardingPage() {
           {step === 0 && (
             <div className="flex flex-col gap-6">
               <div>
-                <h1 className="text-headline-md mb-2">Let's set up your profile</h1>
-                <p className="text-ink-variant text-sm">This helps designers get to know you.</p>
+                <h1 className="text-headline-md mb-2">{hasProfile ? "Your profile" : "Let's set up your profile"}</h1>
+                <p className="text-ink-variant text-sm">
+                  {hasProfile
+                    ? "Review your details — change anything you like."
+                    : "We've filled in the name you registered with. This helps designers get to know you."}
+                </p>
               </div>
               <div className="flex justify-center">
                 <label className="relative w-28 h-28 rounded-full bg-surface-container flex items-center justify-center cursor-pointer overflow-hidden border border-outline-variant">
@@ -132,7 +161,7 @@ export default function OnboardingPage() {
                 <h1 className="text-headline-md mb-2">Where are you based?</h1>
                 <p className="text-ink-variant text-sm">We'll prioritise designers close to you.</p>
               </div>
-              <Field label="City" htmlFor="city" required>
+              <Field label="City (optional)" htmlFor="city">
                 <div className="relative">
                   <MapPin className="absolute left-4 top-1/2 -translate-y-1/2 text-outline" size={16} />
                   <Input id="city" value={city} onChange={(e) => setCity(e.target.value)} placeholder="e.g. Hyderabad" className="pl-11" />
@@ -197,7 +226,7 @@ export default function OnboardingPage() {
           ) : (
             <span />
           )}
-          <Button onClick={next} disabled={saving || (step === 0 && !name.trim()) || (step === 1 && !city.trim())}>
+          <Button onClick={next} disabled={saving || (step === 0 && !name.trim())}>
             {saving ? <><Loader2 size={14} className="animate-spin" /> Finishing…</> : step === STEPS.length - 1 ? "Finish & Explore HRUNA" : "Continue"}
           </Button>
         </div>

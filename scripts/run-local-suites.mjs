@@ -22,6 +22,7 @@ const DB_CONTAINER = "supabase_db_lilirve-app";
 const SUITES = [
   "test-phase3-auth", "test-phase3-rls", "test-phase4-customer", "test-phase5-designer", "test-phase6-admin",
   "test-phase7-audit", "test-phase8-payments", "test-phase9-integration", "test-phase10-security", "test-storage-uploads",
+  "test-messages-ui",
 ];
 const FIXTURES = {
   "test-phase4-customer": ["phase4-review.sql"],

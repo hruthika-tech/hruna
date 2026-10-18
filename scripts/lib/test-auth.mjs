@@ -2,7 +2,7 @@
 //   • sign in:  POST /api/auth/login { email, password }  → Supabase signInWithPassword(), session cookies
 //   • register: POST /api/auth/signup { name, email, password, confirmPassword } → Supabase signUp()
 //               → confirmation email (local Mailpit) → GET /auth/confirm?token_hash=…&type=signup
-//               → session cookies (redirect to /setup-password, password already set at signup)
+//               → session cookies (redirect to /choose-role?confirmed=signup — the password was set at signup)
 // (The old /api/auth/otp/request + /otp/verify routes no longer exist.)
 //
 // LOCAL STACK ONLY. These suites create accounts and data, and several run SQL in the local DB
@@ -102,12 +102,15 @@ export async function signInWithPassword(email, password = seedPassword()) {
   return cookie;
 }
 
-/** Polls Mailpit for the newest confirmation email to `email` and returns its token_hash. */
+/** Polls Mailpit for the newest confirmation email to `email` and returns its token_hash.
+ *  Uses /api/v1/search (the /api/v1/messages listing ignores `query` and returns everyone's mail) and
+ *  also checks the recipient exactly, so a link meant for another address is never used. */
 export async function confirmationTokenFor(email) {
   for (let attempt = 0; attempt < 30; attempt++) {
-    const search = await (await fetch(`${MAILPIT_URL}/api/v1/messages?query=${encodeURIComponent(`to:${email}`)}&limit=1`)).json();
-    if (search.messages?.length > 0) {
-      const msg = await (await fetch(`${MAILPIT_URL}/api/v1/message/${search.messages[0].ID}`)).json();
+    const search = await (await fetch(`${MAILPIT_URL}/api/v1/search?query=${encodeURIComponent(`to:"${email}"`)}&limit=10`)).json();
+    const mine = (search.messages ?? []).find((m) => m.To?.some((t) => t.Address.toLowerCase() === email.toLowerCase()));
+    if (mine) {
+      const msg = await (await fetch(`${MAILPIT_URL}/api/v1/message/${mine.ID}`)).json();
       const match = `${msg.HTML ?? ""} ${msg.Text ?? ""}`.match(/token_hash=([A-Za-z0-9_-]+)/);
       if (match) return match[1];
     }
@@ -129,7 +132,7 @@ export async function registerAndConfirm(email, name = "Test User") {
   const tokenHash = await confirmationTokenFor(email);
   const confirm = await fetch(`${APP_URL}/auth/confirm?token_hash=${encodeURIComponent(tokenHash)}&type=signup`, { redirect: "manual" });
   const location = confirm.headers.get("location") ?? "";
-  if (!location.includes("/setup-password")) throw new Error(`email confirmation failed for ${email}: ${confirm.status} → ${location}`);
+  if (!location.includes("/choose-role?confirmed=signup")) throw new Error(`email confirmation failed for ${email}: ${confirm.status} → ${location}`);
   const cookie = cookiesFrom(confirm);
   if (!cookie) throw new Error(`email confirmation for ${email} returned no session cookie`);
   return { cookie, password: FRESH_PASSWORD };

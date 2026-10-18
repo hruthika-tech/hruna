@@ -115,7 +115,7 @@ export async function requireCustomer(): Promise<AuthContext & { customerId: str
   const ctx = await requireUser();
   assertNotAdmin(ctx);
   if (!ctx.customerId) {
-    throw new AuthorizationError("A customer profile is required for this action.", 403);
+    throw new AuthorizationError("A customer profile is required for this action.", 403, "customer_profile_required");
   }
   return ctx as AuthContext & { customerId: string };
 }

@@ -8,6 +8,7 @@ import { Loader2 } from "lucide-react";
 import { Card } from "@/components/ui/Card";
 import { SaveToggleButton } from "@/components/ui/SaveToggleButton";
 import { formatCurrency } from "@/lib/utils";
+import { DressAvailabilityNote } from "@/components/dresses/DressAvailabilityNote";
 import type { Collection, Dress, Designer } from "@/types";
 
 // Real data (Phase 7 fix) — this page used to read lib/mock-data.ts entirely, which meant it
@@ -93,6 +94,7 @@ export default function CollectionDetailsPage() {
                   <div className="p-5">
                     <p className="font-display text-lg">{d.name}</p>
                     <p className="text-primary text-sm mt-1">{formatCurrency(d.price)}</p>
+                    <DressAvailabilityNote dress={d} />
                   </div>
                 </Card>
               </Link>

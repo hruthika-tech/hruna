@@ -10,6 +10,7 @@ import { createClient } from "@/lib/supabase/server";
 import { getAuthContext } from "@/lib/supabase/authorization";
 import { getStudioBundle } from "@/lib/designer/studio-bundle";
 import { formatCurrency, formatDate } from "@/lib/utils";
+import { DressAvailabilityNote } from "@/components/dresses/DressAvailabilityNote";
 
 // The designer's own "My Studio" — the exact same real data as the public /studio/[id] page
 // (same getStudioBundle()), just for the signed-in designer's own id, plus a "Manage Studio"
@@ -110,7 +111,7 @@ export default async function MyStudioPage() {
             {studioDresses.map((d) => (
               <Card key={d.id} hover>
                 <div className="relative h-56">{d.images[0] && <Image src={d.images[0]} alt={d.name} fill sizes="25vw" className="object-cover" />}</div>
-                <div className="p-4"><p className="text-sm font-medium truncate">{d.name}</p><p className="text-primary text-sm mt-1">{formatCurrency(d.price)}</p></div>
+                <div className="p-4"><p className="text-sm font-medium truncate">{d.name}</p><p className="text-primary text-sm mt-1">{formatCurrency(d.price)}</p><DressAvailabilityNote dress={d} /></div>
               </Card>
             ))}
           </div>

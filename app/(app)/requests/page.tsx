@@ -5,7 +5,7 @@ import Link from "next/link";
 import { Calendar, Loader2, Inbox } from "lucide-react";
 import { Tabs } from "@/components/ui/Tabs";
 import { StatusBadge } from "@/components/ui/Badge";
-import { LinkButton } from "@/components/ui/Button";
+import { Button, LinkButton } from "@/components/ui/Button";
 import { Card, CardBody } from "@/components/ui/Card";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import type { RequestStatus } from "@/types";
@@ -30,9 +30,11 @@ const TABS: { label: string; value: "all" | RequestStatus }[] = [
 
 export default function MyRequestsPage() {
   const [active, setActive] = useState<string>("all");
-  const [status, setStatus] = useState<"loading" | "error" | "ready">("loading");
+  const [status, setStatus] = useState<"loading" | "error" | "no-profile" | "ready">("loading");
   const [error, setError] = useState("");
   const [myRequests, setMyRequests] = useState<RequestSummary[]>([]);
+  const [settingUpProfile, setSettingUpProfile] = useState(false);
+  const [reloadKey, setReloadKey] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
@@ -40,6 +42,12 @@ export default function MyRequestsPage() {
       try {
         const res = await fetch("/api/requests");
         const data = await res.json();
+        // No customer profile yet means there are no requests to show (a request can't exist
+        // without one) — offer to create it from the registration details instead of an error.
+        if (res.status === 403 && data.code === "customer_profile_required") {
+          if (!cancelled) setStatus("no-profile");
+          return;
+        }
         if (!res.ok) throw new Error(data.message ?? "Couldn't load your requests.");
         if (!cancelled) {
           setMyRequests(data.requests);
@@ -55,7 +63,25 @@ export default function MyRequestsPage() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [reloadKey]);
+
+  const setUpProfile = async () => {
+    setSettingUpProfile(true);
+    try {
+      // Empty body: the server links a new profile to the signed-in user and names it from
+      // registration — nothing is asked again.
+      const res = await fetch("/api/profile/customer", { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message ?? "Couldn't set up your customer profile.");
+      setStatus("loading");
+      setReloadKey((k) => k + 1);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Couldn't set up your customer profile.");
+      setStatus("error");
+    } finally {
+      setSettingUpProfile(false);
+    }
+  };
 
   const filtered = myRequests.filter((r) => active === "all" || r.status === active);
 
@@ -79,6 +105,19 @@ export default function MyRequestsPage() {
         <div className="text-center py-24">
           <p className="text-headline-sm mb-2">Couldn't load your requests</p>
           <p className="text-ink-variant text-sm">{error}</p>
+        </div>
+      )}
+
+      {status === "no-profile" && (
+        <div className="text-center py-24">
+          <Inbox className="mx-auto text-outline mb-4" size={32} />
+          <p className="text-headline-sm mb-2">Set up your customer profile</p>
+          <p className="text-ink-variant text-sm mb-8">
+            Requests are sent from a customer profile. We&apos;ll create yours using the name you registered with.
+          </p>
+          <Button onClick={setUpProfile} disabled={settingUpProfile}>
+            {settingUpProfile ? "Setting up…" : "Create customer profile"}
+          </Button>
         </div>
       )}
 

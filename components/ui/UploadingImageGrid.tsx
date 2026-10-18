@@ -4,7 +4,7 @@ import { useRef, useState } from "react";
 import Image from "next/image";
 import { ImagePlus, X, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { uploadImage, deleteUnusedImage, type UploadedImage, type UploadBucket } from "@/lib/customer/upload-client";
+import { uploadImage, deleteUnusedImage, type UploadedImage, type UploadBucket, type UploadEntityType } from "@/lib/customer/upload-client";
 
 /**
  * A real-upload counterpart to components/ui/ImageUploader.tsx, used only where Phase 4 actually
@@ -28,7 +28,7 @@ export function UploadingImageGrid({
   images: UploadedImage[];
   onChange: (images: UploadedImage[]) => void;
   bucket: UploadBucket;
-  entityType: string;
+  entityType: UploadEntityType;
   max?: number;
   label?: string;
 }) {

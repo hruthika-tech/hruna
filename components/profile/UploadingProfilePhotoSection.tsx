@@ -35,11 +35,15 @@ export function UploadingProfilePhotoSection({
   name,
   onSave,
   onRemove,
+  entityType = "customer_avatar",
 }: {
   photoUrl?: string;
   name: string;
   onSave: (result: { fileId: string; url: string }) => void;
   onRemove?: () => void;
+  /** files.entity_type for the upload — the designer profile page passes "designer_avatar" so its
+   *  photos aren't recorded as customer avatars (matching designer onboarding). */
+  entityType?: "customer_avatar" | "designer_avatar";
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [modalOpen, setModalOpen] = useState(false);
@@ -80,7 +84,7 @@ export function UploadingProfilePhotoSection({
     setSaving(true);
     setError("");
     try {
-      const uploaded = await uploadImage(pendingFile, "avatars", "customer_avatar");
+      const uploaded = await uploadImage(pendingFile, "avatars", entityType);
       onSave(uploaded);
       closeModal();
     } catch (err) {

@@ -1,7 +1,7 @@
 "use client";
 
 import { cn } from "@/lib/utils";
-import { BadgeCheck } from "lucide-react";
+import { BadgeCheck, UserRound } from "lucide-react";
 import { SafeImage } from "./SafeImage";
 
 export function Avatar({
@@ -24,7 +24,9 @@ export function Avatar({
         alt={alt}
         sizes={`${size}px`}
         className="rounded-full object-cover border border-primary/10"
-        fallbackIconSize={Math.max(12, size * 0.32)}
+        fallbackIconSize={Math.max(12, size * 0.42)}
+        // No photo (or one that fails to load) shows a default person avatar, never a broken image.
+        fallbackIcon={UserRound}
       />
       {verified && (
         <BadgeCheck

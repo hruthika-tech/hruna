@@ -12,7 +12,7 @@ import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { assertNotAdmin, requireUser } from "@/lib/supabase/authorization";
 import { errorResponse } from "@/lib/supabase/errors";
-import { getPublicFileUrl, deleteFileIfOwnedBy } from "@/lib/supabase/storage";
+import { getPublicFileUrl, deleteFileIfOwnedBy, areFilesOwnedInBucket } from "@/lib/supabase/storage";
 import type { TablesInsert, TablesUpdate } from "@/lib/supabase/types";
 
 export const dynamic = "force-dynamic";
@@ -76,7 +76,20 @@ export async function POST(request: Request) {
     const ctx = await requireUser();
     assertNotAdmin(ctx);
     const body = await request.json().catch(() => null);
-    const name = typeof body?.name === "string" ? body.name.trim() : "";
+    const supabase = createClient();
+
+    // The name is never asked for twice. If the caller doesn't send one:
+    //   - an EXISTING profile keeps its current name (so this never overwrites a profile someone
+    //     already set up — calling it again just returns/updates their own row);
+    //   - a NEW profile uses the name given at registration (auth user_metadata.full_name, set by
+    //     app/api/auth/signup/route.ts), linked to this signed-in user's id.
+    // Only when neither exists is the name genuinely missing.
+    let name = typeof body?.name === "string" ? body.name.trim() : "";
+    if (!name) {
+      const { data: existing } = await supabase.from("customer_profiles").select("name").eq("user_id", ctx.user.id).maybeSingle();
+      const registrationName = typeof ctx.user.user_metadata?.full_name === "string" ? ctx.user.user_metadata.full_name.trim() : "";
+      name = existing?.name ?? registrationName;
+    }
     if (!name) {
       return NextResponse.json(
         { status: "error", message: "Enter your name to set up a customer profile." },
@@ -84,7 +97,6 @@ export async function POST(request: Request) {
       );
     }
 
-    const supabase = createClient();
     const values: TablesInsert<"customer_profiles"> = {
       user_id: ctx.user.id,
       name,
@@ -98,6 +110,9 @@ export async function POST(request: Request) {
     // Optional — lets the onboarding wizard create the profile with its already-uploaded avatar
     // in one call, instead of a POST immediately followed by a PATCH for the same row.
     if (body && "avatarFileId" in body && typeof body.avatarFileId === "string") {
+      if (!(await areFilesOwnedInBucket(supabase, [body.avatarFileId], ctx.user.id, "avatars"))) {
+        return NextResponse.json({ status: "error", message: "That photo couldn't be used. Please upload it again." }, { status: 400 });
+      }
       values.avatar_file_id = body.avatarFileId;
     }
 
@@ -160,6 +175,11 @@ export async function PATCH(request: Request) {
     }
 
     const supabase = createClient();
+
+    // Same rule as POST: only the caller's own upload in the avatars bucket can become their photo.
+    if (typeof patch.avatar_file_id === "string" && !(await areFilesOwnedInBucket(supabase, [patch.avatar_file_id], ctx.user.id, "avatars"))) {
+      return NextResponse.json({ status: "error", message: "That photo couldn't be used. Please upload it again." }, { status: 400 });
+    }
 
     // Read the OLD avatar_file_id before it's overwritten, so a replaced/removed photo's storage
     // object + files row can be cleaned up afterward instead of orphaning forever (Phase 7 storage

@@ -30,7 +30,10 @@ export class AppError extends Error {
 export class AuthorizationError extends Error {
   constructor(
     message: string,
-    public readonly status: 401 | 403
+    public readonly status: 401 | 403,
+    // Optional machine-readable reason (e.g. "customer_profile_required") so a page can offer the
+    // right next step instead of matching on message text. Included in the JSON response.
+    public readonly code?: string
   ) {
     super(message);
     this.name = "AuthorizationError";
@@ -99,7 +102,10 @@ export function toAppError(error: unknown, context: string): AppError {
  */
 export function errorResponse(error: unknown, context: string): NextResponse {
   if (error instanceof AuthorizationError) {
-    return NextResponse.json({ status: "error", message: error.message }, { status: error.status });
+    return NextResponse.json(
+      { status: "error", message: error.message, ...(error.code ? { code: error.code } : {}) },
+      { status: error.status }
+    );
   }
   const appError = toAppError(error, context);
   // A real 429 from Supabase Auth (e.g. its email-send rate limit) is worth preserving as-is —

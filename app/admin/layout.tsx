@@ -12,6 +12,7 @@ const adminNavLinks = [
   { href: "/admin/users", label: "Users" },
   { href: "/admin/subscriptions", label: "Subscriptions & Payments" },
   { href: "/admin/disputes", label: "Reports & Disputes" },
+  { href: "/admin/reports", label: "User Reports" },
   { href: "/admin/notifications", label: "Notifications" },
   { href: "/admin/settings", label: "Admin Settings" },
 ];
