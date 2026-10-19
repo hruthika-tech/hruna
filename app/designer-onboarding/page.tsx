@@ -455,7 +455,7 @@ export default function DesignerOnboardingPage() {
                 <h1 className="text-headline-md mb-2">Show us your work</h1>
                 <p className="text-ink-variant text-sm">Your portfolio helps customers understand your craft and helps HRUNA verify your professional profile. Add at least 3 examples.</p>
               </div>
-              <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                 {onboarding.portfolioItems.map((item) => (
                   <div key={item.id} className="border border-outline-variant rounded-md overflow-hidden">
                     <div className="relative h-36">{item.image && <Image src={item.image} alt={item.title} fill sizes="33vw" className="object-cover" />}</div>
@@ -552,7 +552,7 @@ export default function DesignerOnboardingPage() {
               <h1 className="text-headline-md mb-1">Your studio / work information</h1>
               <p className="text-sm text-ink-variant -mt-4">A local tailor working from home is just as welcome as a boutique — no physical shop required.</p>
               <Field label="Studio / boutique name" htmlFor="studioName" required><Input id="studioName" value={studioName} onChange={(e) => setStudioName(e.target.value)} /></Field>
-              <div className="grid sm:grid-cols-2 gap-6">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
                 <Field label="City" htmlFor="city" required><Input id="city" value={city} onChange={(e) => setCity(e.target.value)} /></Field>
                 <Field label="Area / locality" htmlFor="area"><Input id="area" value={area} onChange={(e) => setArea(e.target.value)} /></Field>
               </div>
@@ -572,7 +572,7 @@ export default function DesignerOnboardingPage() {
                 <Input id="address" value={address} onChange={(e) => setAddress(e.target.value)} />
               </Field>
               <Field label="About your studio" htmlFor="aboutStudio"><Textarea id="aboutStudio" value={aboutStudio} onChange={(e) => setAboutStudio(e.target.value)} /></Field>
-              <div className="grid sm:grid-cols-2 gap-6">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
                 <Field label="Instagram (optional)" htmlFor="instagram"><Input id="instagram" value={instagramUrl} onChange={(e) => setInstagramUrl(e.target.value)} /></Field>
                 <Field label="Website (optional)" htmlFor="website"><Input id="website" value={websiteUrl} onChange={(e) => setWebsiteUrl(e.target.value)} /></Field>
               </div>

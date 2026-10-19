@@ -1,6 +1,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { MapPin, Clock, Mail, Settings, CheckCircle2, Award } from "lucide-react";
+import { ZoomableImage } from "@/components/ui/ImageLightbox";
 import { Avatar, Badge } from "@/components/ui/Badge";
 import { RatingDisplay } from "@/components/ui/Rating";
 import { LinkButton } from "@/components/ui/Button";
@@ -75,7 +76,7 @@ export default async function MyStudioPage() {
         </div>
       </div>
 
-      <section className="container-editorial mt-16 grid md:grid-cols-3 gap-12">
+      <section className="container-editorial mt-16 grid grid-cols-1 md:grid-cols-3 gap-12">
         <div className="md:col-span-2">
           <p className="text-label-md text-outline mb-3">STUDIO STORY</p>
           <p className="text-body-lg text-ink-variant leading-relaxed">{designer.story}</p>
@@ -94,7 +95,7 @@ export default async function MyStudioPage() {
       <section className="container-editorial mt-16">
         <p className="text-label-md text-outline mb-6">COLLECTIONS ({collections.length})</p>
         {collections.length > 0 ? (
-          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
             {collections.map((c) => (
               <CollectionCard key={c.id} name={c.name} category={c.category} coverImage={c.coverImage} pieceCount={c.dressIds.length} />
             ))}
@@ -107,7 +108,7 @@ export default async function MyStudioPage() {
       <section className="container-editorial mt-16">
         <p className="text-label-md text-outline mb-6">DRESSES ({studioDresses.length})</p>
         {studioDresses.length > 0 ? (
-          <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-6">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
             {studioDresses.map((d) => (
               <Card key={d.id} hover>
                 <div className="relative h-56">{d.images[0] && <Image src={d.images[0]} alt={d.name} fill sizes="25vw" className="object-cover" />}</div>
@@ -123,10 +124,21 @@ export default async function MyStudioPage() {
       <section className="container-editorial mt-16">
         <p className="text-label-md text-outline mb-6">PREVIOUS CREATIONS ({previousCreations.length})</p>
         {previousCreations.length > 0 ? (
-          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
             {previousCreations.map((cr) => (
               <Card key={cr.id} hover>
-                <div className="relative h-48">{cr.image && <Image src={cr.image} alt="" fill sizes="33vw" className="object-cover" />}</div>
+                {cr.image ? (
+                  <ZoomableImage
+                    images={previousCreations.flatMap((x) => (x.image ? [x.image] : []))}
+                    index={previousCreations.filter((x) => x.image).indexOf(cr)}
+                    alt=""
+                    sizes="(max-width: 640px) 100vw, 33vw"
+                    label={`View previous creation${cr.year ? ` (${cr.year})` : ""}`}
+                    className="h-48"
+                  />
+                ) : (
+                  <div className="relative h-48" />
+                )}
                 <div className="p-4"><p className="text-xs text-outline mb-1">{cr.year}</p><p className="text-sm text-ink-variant">{cr.description}</p></div>
               </Card>
             ))}
@@ -139,7 +151,7 @@ export default async function MyStudioPage() {
       <section className="container-editorial mt-16">
         <p className="text-label-md text-outline mb-6">CUSTOMER REVIEWS ({reviews.length})</p>
         {reviews.length > 0 ? (
-          <div className="grid md:grid-cols-2 gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             {reviews.map((r) => (
               <div key={r.id} className="border border-outline-variant rounded-md p-6">
                 <RatingDisplay value={r.rating} />

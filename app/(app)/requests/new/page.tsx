@@ -211,7 +211,7 @@ function NewRequestPageContent() {
             <Field label="Project title" htmlFor="title" required>
               <Input id="title" value={form.title} onChange={(e) => update("title", e.target.value)} placeholder="e.g. Reception lehenga in dusty rose" />
             </Field>
-            <div className="grid sm:grid-cols-2 gap-6">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
               <Field label="Category" htmlFor="category" required>
                 <Select id="category" value={form.category} onChange={(e) => update("category", e.target.value)}>
                   {CATEGORIES.map((c) => <option key={c}>{c}</option>)}

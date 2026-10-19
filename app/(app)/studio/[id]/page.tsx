@@ -1,6 +1,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { ZoomableImage } from "@/components/ui/ImageLightbox";
 import { MapPin, Clock, Mail, ArrowRight, CheckCircle2, Award } from "lucide-react";
 import { Avatar, Badge } from "@/components/ui/Badge";
 import { RatingDisplay } from "@/components/ui/Rating";
@@ -65,7 +66,7 @@ export default async function PublicStudioPage({ params }: { params: { id: strin
       </div>
 
       {/* About */}
-      <section className="container-editorial mt-16 grid md:grid-cols-3 gap-12">
+      <section className="container-editorial mt-16 grid grid-cols-1 md:grid-cols-3 gap-12">
         <div className="md:col-span-2">
           <p className="text-label-md text-outline mb-3">ABOUT THE STUDIO</p>
           <p className="text-body-lg text-ink-variant leading-relaxed">{designer.story}</p>
@@ -96,14 +97,22 @@ export default async function PublicStudioPage({ params }: { params: { id: strin
       {designer.highlights.length > 0 && (
         <section className="container-editorial mt-20">
           <p className="text-label-md text-outline mb-6">STUDIO HIGHLIGHTS</p>
-          <div className="grid md:grid-cols-3 gap-6">
-            {designer.highlights.map((h, i) => (
-              <div key={i} className="relative h-72 rounded-md overflow-hidden group">
-                <Image src={h.image} alt={h.caption} fill sizes="33vw" className="object-cover transition-transform duration-500 group-hover:scale-105" />
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            {designer.highlights.map((h, i, all) => (
+              <ZoomableImage
+                key={i}
+                images={all.map((x) => x.image)}
+                index={i}
+                alt={h.caption}
+                sizes="(max-width: 768px) 100vw, 33vw"
+                label={`View studio highlight: ${h.caption || `image ${i + 1}`}`}
+                className="h-72 rounded-md group"
+                imageClassName="object-cover transition-transform duration-500 group-hover:scale-105"
+              >
                 <div className="absolute inset-0 bg-gradient-to-t from-ink/70 to-transparent flex items-end p-5">
                   <p className="text-white text-sm">{h.caption}</p>
                 </div>
-              </div>
+              </ZoomableImage>
             ))}
           </div>
         </section>
@@ -113,13 +122,11 @@ export default async function PublicStudioPage({ params }: { params: { id: strin
       {designer.meetTheDesigner.length > 0 && (
         <section className="container-editorial mt-20">
           <p className="text-label-md text-outline mb-6">MEET THE DESIGNER</p>
-          <div className="grid md:grid-cols-2 gap-10">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-10">
             {designer.meetTheDesigner.map((m, i) => (
               <div key={i} className="flex gap-5 items-start">
-                <div className="relative w-28 h-36 rounded-sm overflow-hidden shrink-0">
-                  <Image src={m.image} alt="" fill sizes="112px" className="object-cover" />
-                </div>
-                <p className="text-ink-variant text-sm leading-relaxed">{m.description}</p>
+                <ZoomableImage images={[m.image]} index={0} alt="" sizes="112px" label="View photo of the designer" className="w-28 h-36 rounded-sm shrink-0" />
+                <p className="text-ink-variant text-sm leading-relaxed min-w-0">{m.description}</p>
               </div>
             ))}
           </div>
@@ -132,7 +139,7 @@ export default async function PublicStudioPage({ params }: { params: { id: strin
           <div className="flex items-end justify-between mb-6">
             <p className="text-label-md text-outline">COLLECTIONS</p>
           </div>
-          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
             {studioCollections.map((c) => (
               <Link key={c.id} href={`/collections/${c.id}`}>
                 <CollectionCard name={c.name} category={c.category} coverImage={c.coverImage} pieceCount={c.dressIds.length} />
@@ -146,7 +153,7 @@ export default async function PublicStudioPage({ params }: { params: { id: strin
       {studioDresses.length > 0 && (
         <section className="container-editorial mt-20">
           <p className="text-label-md text-outline mb-6">PREVIOUS CREATIONS & AVAILABLE PIECES</p>
-          <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-6">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
             {studioDresses.map((d) => (
               <Link key={d.id} href={`/dresses/${d.id}`}>
                 <Card hover>
@@ -167,7 +174,7 @@ export default async function PublicStudioPage({ params }: { params: { id: strin
       <section className="container-editorial mt-20">
         <p className="text-label-md text-outline mb-6">CUSTOMER REVIEWS</p>
         {studioReviews.length > 0 ? (
-          <div className="grid md:grid-cols-2 gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             {studioReviews.map((r) => (
               <div key={r.id} className="border border-outline-variant rounded-md p-6">
                 <RatingDisplay value={r.rating} />

@@ -88,24 +88,24 @@ export default function MyProjectsPage() {
           />
 
           {filtered.length > 0 ? (
-            <div className="grid md:grid-cols-2 gap-6 mt-8">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-8">
               {filtered.map((p) => (
                 <Link key={p.id} href={`/projects/${p.id}`}>
                   <Card hover>
                     <CardBody className="flex flex-col gap-4">
-                      <div className="flex items-start justify-between">
-                        <div className="flex items-center gap-3">
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="flex items-center gap-3 min-w-0">
                           {p.referenceImages[0] && (
                             <div className="relative w-14 h-14 rounded-sm overflow-hidden shrink-0">
                               <Image src={p.referenceImages[0]} alt="" fill sizes="56px" className="object-cover" />
                             </div>
                           )}
-                          <div>
-                            <p className="font-display text-lg leading-tight">{p.title}</p>
+                          <div className="min-w-0">
+                            <p className="font-display text-lg leading-tight break-words">{p.title}</p>
                             {p.designer && <p className="text-xs text-outline">{p.designer.studioName}</p>}
                           </div>
                         </div>
-                        <StatusBadge status={p.status} />
+                        <span className="shrink-0"><StatusBadge status={p.status} /></span>
                       </div>
                       <div>
                         <div className="flex justify-between text-xs text-outline mb-1.5">

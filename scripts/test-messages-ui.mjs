@@ -63,7 +63,7 @@ async function contextFor(browser, cookieHeader) {
 /** Where a bubble is ACTUALLY rendered: compares the bubble's centre with its full-width row's centre. */
 async function sideOf(page, text) {
   // Scoped to the open thread (the card preview in the inbox list can carry the same text).
-  const bubble = page.locator("div.overflow-y-auto.p-5").getByText(text, { exact: true });
+  const bubble = page.locator('[data-testid="message-thread"]').getByText(text, { exact: true });
   await bubble.waitFor({ state: "visible", timeout: 20000 });
   const row = bubble.locator("xpath=..");
   const b = await bubble.boundingBox();
@@ -147,10 +147,10 @@ async function main() {
     const selfConv = sql(`insert into public.conversations (customer_id, designer_id) values ('${meeraCustomer}', '${MEERA_DESIGNER_ID}') returning id;`).split("\n")[0];
     sql(`insert into public.messages (conversation_id, sender_id, text) values ('${selfConv}', '${meeraUser}', 'self-note test');`);
     await designerPage.goto(`${APP_URL}/designer/messages?conversationId=${selfConv}`);
-    await designerPage.locator("div.overflow-y-auto.p-5").getByText("self-note test", { exact: true }).waitFor({ state: "visible", timeout: 20000 });
+    await designerPage.locator('[data-testid="message-thread"]').getByText("self-note test", { exact: true }).waitFor({ state: "visible", timeout: 20000 });
     check("The self-conversation shows the 'between your own customer profile and your own studio' note", await designerPage.getByText("between your own customer profile and your own studio").isVisible());
     await designerPage.goto(`${APP_URL}/designer/messages?conversationId=${convId}`);
-    await designerPage.locator("div.overflow-y-auto.p-5").getByText("ui-2 from designer", { exact: true }).waitFor({ state: "visible", timeout: 20000 });
+    await designerPage.locator('[data-testid="message-thread"]').getByText("ui-2 from designer", { exact: true }).waitFor({ state: "visible", timeout: 20000 });
     check("…and a normal conversation does NOT show that note", !(await designerPage.getByText("between your own customer profile and your own studio").isVisible()));
   } finally {
     await browser.close();

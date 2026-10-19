@@ -6,6 +6,7 @@ import { useParams, useRouter } from "next/navigation";
 import { MapPin, MessageCircle, Loader2 } from "lucide-react";
 import { SaveToggleButton } from "@/components/ui/SaveToggleButton";
 import { Avatar } from "@/components/ui/Badge";
+import { ImageLightbox, LightboxTrigger } from "@/components/ui/ImageLightbox";
 import { Button, LinkButton } from "@/components/ui/Button";
 import { useToast } from "@/hooks/use-toast";
 import { formatCurrency, cn } from "@/lib/utils";
@@ -22,6 +23,7 @@ export default function DressDetailsPage() {
   const [dress, setDress] = useState<Dress | null>(null);
   const [designer, setDesigner] = useState<Designer | null>(null);
   const [activeImg, setActiveImg] = useState(0);
+  const [viewer, setViewer] = useState<number | null>(null);
   const [contacting, setContacting] = useState(false);
 
   useEffect(() => {
@@ -91,22 +93,25 @@ export default function DressDetailsPage() {
 
   return (
     <div className="container-editorial py-12 pb-section-gap">
-      <div className="grid md:grid-cols-2 gap-12">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-12">
         <div>
           <div className="relative h-[480px] rounded-md overflow-hidden mb-4 bg-surface-low">
             {dress.images[activeImg] && (
-              <Image src={dress.images[activeImg]} alt={dress.name} fill className="object-cover" />
+              <LightboxTrigger onOpen={() => setViewer(activeImg)} label={`Enlarge image of ${dress.name}`} className="absolute inset-0 w-full h-full">
+                <Image src={dress.images[activeImg]} alt={dress.name} fill className="object-cover" />
+              </LightboxTrigger>
             )}
             {availability.badge && (
-              <span className="absolute top-4 left-4 bg-ink/70 text-white text-xs px-3 py-1.5 rounded-full">{availability.badge}</span>
+              <span className="pointer-events-none absolute top-4 left-4 bg-ink/70 text-white text-xs px-3 py-1.5 rounded-full">{availability.badge}</span>
             )}
           </div>
           {dress.images.length > 1 && (
-            <div className="flex gap-3">
+            <div className="flex flex-wrap gap-3">
               {dress.images.map((img, i) => (
                 <button
                   key={img}
                   onClick={() => setActiveImg(i)}
+                  aria-label={`Show image ${i + 1}`}
                   className={cn(
                     "relative w-20 h-20 rounded-sm overflow-hidden border-2",
                     activeImg === i ? "border-primary" : "border-transparent"
@@ -117,6 +122,7 @@ export default function DressDetailsPage() {
               ))}
             </div>
           )}
+          <ImageLightbox images={dress.images} index={viewer} onClose={() => setViewer(null)} onIndexChange={(i) => { setViewer(i); setActiveImg(i); }} />
         </div>
 
         <div>

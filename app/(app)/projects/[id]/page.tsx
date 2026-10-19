@@ -9,6 +9,7 @@ import { SaveToggleButton } from "@/components/ui/SaveToggleButton";
 import { Timeline, ProgressBar } from "@/components/ui/Progress";
 import { Button } from "@/components/ui/Button";
 import { Modal } from "@/components/ui/Modal";
+import { ImageLightbox, LightboxTrigger } from "@/components/ui/ImageLightbox";
 import { Field, Textarea } from "@/components/ui/Input";
 import { RatingInput } from "@/components/ui/Rating";
 import { useToast } from "@/hooks/use-toast";
@@ -55,6 +56,7 @@ export default function ProjectWorkspacePage() {
 
   const [status, setStatus] = useState<"loading" | "error" | "ready">("loading");
   const [error, setError] = useState("");
+  const [viewer, setViewer] = useState<{ images: string[]; index: number } | null>(null);
   const [project, setProject] = useState<ProjectDetail | null>(null);
   const [updates, setUpdates] = useState<ProgressUpdateItem[]>([]);
   const [customer, setCustomer] = useState<{ city: string; phone: string } | null>(null);
@@ -205,12 +207,12 @@ export default function ProjectWorkspacePage() {
 
   return (
     <div className="container-editorial py-12 pb-section-gap">
-      <div className="flex items-start justify-between mb-6">
-        <div>
+      <div className="flex flex-wrap items-start justify-between gap-4 mb-6">
+        <div className="min-w-0">
           <p className="text-label-md text-outline mb-2">PROJECT WORKSPACE</p>
-          <h1 className="text-headline-md">{project.title}</h1>
+          <h1 className="text-headline-md break-words">{project.title}</h1>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-3">
           <SaveToggleButton itemType="project" itemId={project.id} size="sm" />
           <Badge tone="primary">{project.stage}</Badge>
         </div>
@@ -267,16 +269,21 @@ export default function ProjectWorkspacePage() {
         </div>
       )}
 
-      <div className="grid lg:grid-cols-3 gap-12">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-12">
         <div className="lg:col-span-2 flex flex-col gap-12">
           {/* Design details */}
           <section>
             <p className="text-label-md text-outline mb-4">DESIGN DETAILS</p>
-            <div className="flex gap-5 mb-5">
+            <div className="flex flex-wrap gap-3 sm:gap-5 mb-5">
               {project.referenceImages.map((img, i) => (
-                <div key={i} className="relative w-24 h-24 rounded-sm overflow-hidden">
+                <LightboxTrigger
+                  key={i}
+                  onOpen={() => setViewer({ images: project.referenceImages, index: i })}
+                  label={`View design image ${i + 1} of ${project.referenceImages.length}`}
+                  className="relative w-24 h-24 rounded-sm overflow-hidden"
+                >
                   <Image src={img} alt="" fill sizes="96px" className="object-cover" />
-                </div>
+                </LightboxTrigger>
               ))}
               {project.referenceImages.length === 0 && (
                 <div className="w-24 h-24 rounded-sm bg-surface-container flex items-center justify-center text-xs text-outline">No image</div>
@@ -288,7 +295,7 @@ export default function ProjectWorkspacePage() {
               <Badge tone="neutral">{project.gender}</Badge>
             </div>
             <p className="text-ink-variant text-sm leading-relaxed mb-4">{project.description}</p>
-            <div className="grid sm:grid-cols-2 gap-6 text-sm mb-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 text-sm mb-4">
               <div>
                 <p className="text-outline text-xs mb-1">FABRIC PREFERENCE</p>
                 <p>{project.fabricPreference || "Not provided"}</p>
@@ -335,11 +342,15 @@ export default function ProjectWorkspacePage() {
               {[...updates].reverse().map((u) => (
                 <div key={u.id} className="flex gap-4 border-b border-outline-variant pb-6 last:border-none">
                   {u.images[0] && (
-                    <div className="relative w-20 h-20 rounded-sm overflow-hidden shrink-0">
+                    <LightboxTrigger
+                      onOpen={() => setViewer({ images: u.images, index: 0 })}
+                      label={u.images.length > 1 ? `View ${u.images.length} progress photos` : "View progress photo"}
+                      className="relative w-20 h-20 rounded-sm overflow-hidden shrink-0"
+                    >
                       <Image src={u.images[0]} alt="" fill sizes="80px" className="object-cover" />
-                    </div>
+                    </LightboxTrigger>
                   )}
-                  <div>
+                  <div className="min-w-0">
                     <div className="flex items-center gap-2 mb-1">
                       <Badge tone="primary">{u.stage}</Badge>
                       <span className="text-xs text-outline">{formatDate(u.date)}</span>
@@ -389,6 +400,13 @@ export default function ProjectWorkspacePage() {
           </div>
         </aside>
       </div>
+
+      <ImageLightbox
+        images={viewer?.images ?? []}
+        index={viewer?.index ?? null}
+        onClose={() => setViewer(null)}
+        onIndexChange={(index) => setViewer((v) => (v ? { ...v, index } : v))}
+      />
 
       <Modal open={confirmModalOpen} onClose={() => (confirming ? null : setConfirmModalOpen(false))} title="Confirm completion?">
         <div className="flex flex-col gap-5">

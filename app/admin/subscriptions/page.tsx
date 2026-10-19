@@ -166,13 +166,13 @@ export default function AdminSubscriptionsPage() {
         </div>
       </section>
 
-      <section className="grid sm:grid-cols-3 gap-4 mb-10">
+      <section className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-10">
         <StatCard label="Active Subscriptions" value={active} />
         <StatCard label="Expired Subscriptions" value={expired} />
         <StatCard label="Cancelled Subscriptions" value={cancelled} />
       </section>
 
-      <div className="grid lg:grid-cols-2 gap-6 mb-10">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-10">
         {plans.map((plan) => (
           <PlanEditor key={plan.id} plan={plan} onSaved={() => { push("Plan updated."); load(); }} />
         ))}
@@ -197,7 +197,7 @@ export default function AdminSubscriptionsPage() {
           </div>
         </div>
 
-        <div className="grid sm:grid-cols-3 lg:grid-cols-5 gap-4 mb-8">
+        <div className="grid grid-cols-1 sm:grid-cols-3 lg:grid-cols-5 gap-4 mb-8">
           <StatCard label="Today's Revenue" value={formatCurrency(todayRevenue)} />
           <StatCard label="Monthly Revenue" value={formatCurrency(monthRevenue)} />
           <StatCard label="Total Revenue" value={formatCurrency(totalRevenue)} />

@@ -60,7 +60,7 @@ export default async function CustomerHomePage() {
           </Link>
         </div>
         {designers.length > 0 ? (
-          <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-6">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
             {designers.map((d) => (
               <DesignerCard key={d.id} designer={d} />
             ))}
@@ -77,7 +77,7 @@ export default async function CustomerHomePage() {
             <div className="flex items-end justify-between mb-8">
               <h2 className="text-headline-sm">Collections to explore</h2>
             </div>
-            <div className="grid md:grid-cols-3 gap-6">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
               {collections.map((c) => (
                 <Link key={c.id} href={`/collections/${c.id}`}>
                   <Card hover className="group">
@@ -110,7 +110,7 @@ export default async function CustomerHomePage() {
           <div className="flex items-end justify-between mb-8">
             <h2 className="text-headline-sm">Ready-made pieces</h2>
           </div>
-          <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-6">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
             {dresses.map((d) => (
               <Link key={d.id} href={`/dresses/${d.id}`}>
                 <Card hover>

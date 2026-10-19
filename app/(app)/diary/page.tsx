@@ -99,7 +99,7 @@ export default function FashionDiaryPage() {
             <Button onClick={() => setOpen(true)}>Write Your First Entry</Button>
           </div>
         ) : (
-          <div className="grid md:grid-cols-2 gap-8">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
             {entries.map((e) => (
               <Link key={e.id} href={`/diary/${e.id}`} className="group">
                 <article className="border border-outline-variant rounded-md overflow-hidden h-full transition-shadow duration-300 group-hover:shadow-soft">

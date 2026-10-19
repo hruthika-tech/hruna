@@ -10,7 +10,7 @@ export function ChooseRoleOptions() {
   const router = useRouter();
 
   return (
-    <div className="grid sm:grid-cols-2 gap-6 w-full max-w-2xl">
+    <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 w-full max-w-2xl">
       <button
         onClick={() => router.push("/onboarding")}
         data-testid="choose-customer"

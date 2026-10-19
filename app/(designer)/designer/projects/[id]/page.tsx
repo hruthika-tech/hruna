@@ -9,6 +9,7 @@ import { Badge } from "@/components/ui/Badge";
 import { Timeline, ProgressBar } from "@/components/ui/Progress";
 import { Button } from "@/components/ui/Button";
 import { Modal } from "@/components/ui/Modal";
+import { ImageLightbox, LightboxTrigger } from "@/components/ui/ImageLightbox";
 import { Field, Select, Textarea } from "@/components/ui/Input";
 import { UploadingImageGrid } from "@/components/ui/UploadingImageGrid";
 import { useToast } from "@/hooks/use-toast";
@@ -56,6 +57,7 @@ export default function DesignerProjectWorkspacePage() {
 
   const [status, setStatus] = useState<"loading" | "error" | "ready">("loading");
   const [error, setError] = useState("");
+  const [viewer, setViewer] = useState<{ images: string[]; index: number } | null>(null);
   const [project, setProject] = useState<ProjectDetail | null>(null);
   const [updates, setUpdates] = useState<ProgressUpdateItem[]>([]);
   const [opening, setOpening] = useState(false);
@@ -232,12 +234,12 @@ export default function DesignerProjectWorkspacePage() {
 
   return (
     <div className="container-editorial py-12 pb-section-gap">
-      <div className="flex items-start justify-between mb-6">
-        <div>
+      <div className="flex flex-wrap items-start justify-between gap-4 mb-6">
+        <div className="min-w-0">
           <p className="text-label-md text-outline mb-2">PROJECT WORKSPACE</p>
-          <h1 className="text-headline-md">{project.title}</h1>
+          <h1 className="text-headline-md break-words">{project.title}</h1>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-3">
           <Badge tone="primary">{project.stage}</Badge>
           {project.status === "active" && (
             <Button size="sm" onClick={handleMarkCompleted} disabled={completing}>
@@ -260,13 +262,20 @@ export default function DesignerProjectWorkspacePage() {
         </div>
       )}
 
-      <div className="grid lg:grid-cols-3 gap-12">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-12">
         <div className="lg:col-span-2 flex flex-col gap-12">
           <section>
             <p className="text-label-md text-outline mb-4">DESIGN DETAILS</p>
-            <div className="flex gap-5 mb-5">
+            <div className="flex flex-wrap gap-3 sm:gap-5 mb-5">
               {project.referenceImages.map((img, i) => (
-                <div key={i} className="relative w-24 h-24 rounded-sm overflow-hidden"><Image src={img} alt="" fill sizes="96px" className="object-cover" /></div>
+                <LightboxTrigger
+                  key={i}
+                  onOpen={() => setViewer({ images: project.referenceImages, index: i })}
+                  label={`View design image ${i + 1} of ${project.referenceImages.length}`}
+                  className="relative w-24 h-24 rounded-sm overflow-hidden"
+                >
+                  <Image src={img} alt="" fill sizes="96px" className="object-cover" />
+                </LightboxTrigger>
               ))}
               {project.referenceImages.length === 0 && (
                 <div className="w-24 h-24 rounded-sm bg-surface-container flex items-center justify-center text-xs text-outline">No image</div>
@@ -278,7 +287,7 @@ export default function DesignerProjectWorkspacePage() {
               <Badge tone="neutral">{project.gender}</Badge>
             </div>
             <p className="text-ink-variant text-sm leading-relaxed mb-4">{project.description}</p>
-            <div className="grid sm:grid-cols-2 gap-6 text-sm mb-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 text-sm mb-4">
               <div><p className="text-outline text-xs mb-1">FABRIC PREFERENCE</p><p>{project.fabricPreference || "Not provided"}</p></div>
               <div><p className="text-outline text-xs mb-1">AGREED BUDGET</p><p>{formatCurrency(project.confirmedPrice)}</p></div>
               <div><p className="text-outline text-xs mb-1">ORIGINAL BUDGET RANGE</p><p>{formatCurrency(project.budgetMin)} – {formatCurrency(project.budgetMax)}</p></div>
@@ -312,18 +321,24 @@ export default function DesignerProjectWorkspacePage() {
               {[...updates].reverse().map((u) => (
                 <div key={u.id} className="flex gap-4 border-b border-outline-variant pb-6 last:border-none group">
                   {u.images[0] && (
-                    <div className="relative w-20 h-20 rounded-sm overflow-hidden shrink-0"><Image src={u.images[0]} alt="" fill sizes="80px" className="object-cover" /></div>
+                    <LightboxTrigger
+                      onOpen={() => setViewer({ images: u.images, index: 0 })}
+                      label={u.images.length > 1 ? `View ${u.images.length} progress photos` : "View progress photo"}
+                      className="relative w-20 h-20 rounded-sm overflow-hidden shrink-0"
+                    >
+                      <Image src={u.images[0]} alt="" fill sizes="80px" className="object-cover" />
+                    </LightboxTrigger>
                   )}
-                  <div className="flex-1">
+                  <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 mb-1">
                       <Badge tone="primary">{u.stage}</Badge>
                       <span className="text-xs text-outline">{formatDate(u.date)}</span>
                     </div>
                     <p className="text-sm text-ink-variant">{u.note}</p>
                   </div>
-                  <div className="flex flex-col gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                    <button onClick={() => openEdit(u)} aria-label="Edit update" className="p-1.5 text-outline hover:text-primary"><Pencil size={14} /></button>
-                    <button onClick={() => deleteUpdate(u.id)} aria-label="Delete update" className="p-1.5 text-outline hover:text-error"><Trash2 size={14} /></button>
+                  <div className="flex flex-col gap-1 lg:opacity-0 lg:group-hover:opacity-100 lg:focus-within:opacity-100 transition-opacity">
+                    <button onClick={() => openEdit(u)} aria-label="Edit update" className="p-2.5 lg:p-1.5 text-outline hover:text-primary"><Pencil size={14} /></button>
+                    <button onClick={() => deleteUpdate(u.id)} aria-label="Delete update" className="p-2.5 lg:p-1.5 text-outline hover:text-error"><Trash2 size={14} /></button>
                   </div>
                 </div>
               ))}
@@ -374,6 +389,13 @@ export default function DesignerProjectWorkspacePage() {
           </div>
         </aside>
       </div>
+
+      <ImageLightbox
+        images={viewer?.images ?? []}
+        index={viewer?.index ?? null}
+        onClose={() => setViewer(null)}
+        onIndexChange={(index) => setViewer((v) => (v ? { ...v, index } : v))}
+      />
 
       <Modal open={modalOpen} onClose={() => (saving ? null : setModalOpen(false))} title={editingId ? "Edit progress update" : "Add progress update"}>
         <div className="flex flex-col gap-5">

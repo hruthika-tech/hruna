@@ -76,7 +76,7 @@ export default function DesignerReviewsPage() {
       </div>
 
       {reviews.length > 0 ? (
-        <div className="grid md:grid-cols-2 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           {reviews.map((r) => (
             <div key={r.id} className="border border-outline-variant rounded-md p-6">
               <div className="flex items-center gap-3 mb-3">

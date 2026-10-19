@@ -7,6 +7,7 @@ import { useParams, useRouter } from "next/navigation";
 import { ArrowLeft, Pencil, Trash2, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { Modal } from "@/components/ui/Modal";
+import { ImageLightbox, LightboxTrigger } from "@/components/ui/ImageLightbox";
 import { DiaryEntryModal, type DiaryEntryDraft } from "@/components/diary/DiaryEntryModal";
 import { useToast } from "@/hooks/use-toast";
 import { formatDate, cn } from "@/lib/utils";
@@ -32,6 +33,7 @@ export default function DiaryEntryDetailPage() {
   const [error, setError] = useState("");
   const [entry, setEntry] = useState<DiaryEntryDetail | null>(null);
   const [activeImg, setActiveImg] = useState(0);
+  const [viewer, setViewer] = useState<number | null>(null);
   const [editOpen, setEditOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
@@ -121,12 +123,12 @@ export default function DiaryEntryDetailPage() {
         <ArrowLeft size={15} /> Back to Fashion Diary
       </Link>
 
-      <div className="grid md:grid-cols-2 gap-12">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-12">
         <div>
           {entry.images[activeImg] && (
-            <div className="relative h-[480px] rounded-md overflow-hidden mb-4">
+            <LightboxTrigger onOpen={() => setViewer(activeImg)} label={`Enlarge image of ${entry.title}`} className="relative w-full h-[480px] rounded-md overflow-hidden mb-4">
               <Image src={entry.images[activeImg]} alt={entry.title} fill className="object-cover" />
-            </div>
+            </LightboxTrigger>
           )}
           {entry.images.length > 1 && (
             <div className="flex gap-3 flex-wrap">
@@ -145,6 +147,7 @@ export default function DiaryEntryDetailPage() {
               ))}
             </div>
           )}
+          <ImageLightbox images={entry.images} index={viewer} onClose={() => setViewer(null)} onIndexChange={(i) => { setViewer(i); setActiveImg(i); }} />
         </div>
 
         <div>

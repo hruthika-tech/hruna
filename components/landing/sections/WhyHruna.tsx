@@ -21,7 +21,7 @@ export function WhyHruna({ stats }: { stats: { designers: number; pieces: number
         <h2 className="font-display text-4xl md:text-5xl text-scrapbook-forest">More than a marketplace.</h2>
       </div>
 
-      <Stagger className="grid sm:grid-cols-2 gap-8 md:gap-10 max-w-3xl mx-auto" stagger={0.12}>
+      <Stagger className="grid grid-cols-1 sm:grid-cols-2 gap-8 md:gap-10 max-w-3xl mx-auto" stagger={0.12}>
         {IDEAS.map(({ icon: Icon, title, copy, rotate }, i) => (
           <StaggerItem key={title} className={i % 2 === 1 ? "sm:mt-8" : ""}>
             <PaperCard rotate={rotate} className="relative p-6">

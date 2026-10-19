@@ -422,7 +422,7 @@ export default function ManageStudioPage() {
               <Button size="sm" onClick={() => setHighlightModal({ id: null, image: null, caption: "" })}><Plus size={14} /> Add Highlight</Button>
             )}
           </div>
-          <div className="grid md:grid-cols-3 gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             {designer.highlights.map((h) => (
               <div key={h.id} className="relative rounded-md overflow-hidden group h-56">
                 <Image src={h.image} alt={h.caption} fill sizes="33vw" className="object-cover" />
@@ -447,7 +447,7 @@ export default function ManageStudioPage() {
               <Button size="sm" onClick={() => setMeetModal({ id: null, image: null, description: "" })}><Plus size={14} /> Add Entry</Button>
             )}
           </div>
-          <div className="grid md:grid-cols-2 gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             {designer.meetTheDesigner.map((m) => (
               <div key={m.id} className="flex gap-4 border border-outline-variant rounded-md p-4">
                 <div className="relative w-24 h-28 rounded-sm overflow-hidden shrink-0"><Image src={m.image} alt="" fill sizes="96px" className="object-cover" /></div>
@@ -504,7 +504,7 @@ export default function ManageStudioPage() {
                       </Button>
                     </div>
                   </div>
-                  <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                     {collectionDresses.map((d) => (
                       <div key={d.id} className="border border-outline-variant rounded-sm overflow-hidden relative">
                         <div className="relative h-40">
@@ -545,7 +545,7 @@ export default function ManageStudioPage() {
             <p className="text-sm text-ink-variant">Show past work with the year completed.</p>
             <Button size="sm" onClick={() => setCreationModal({ id: null, image: null, description: "", year: "" })}><Plus size={14} /> Add Creation</Button>
           </div>
-          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
             {previousCreations.map((cr) => (
               <div key={cr.id} className="border border-outline-variant rounded-md overflow-hidden">
                 <div className="relative h-48">{cr.image && <Image src={cr.image} alt="" fill sizes="33vw" className="object-cover" />}</div>

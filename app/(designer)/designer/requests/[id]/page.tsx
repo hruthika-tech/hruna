@@ -7,6 +7,7 @@ import { MapPin, Calendar, Wallet, Heart, Bookmark, Loader2 } from "lucide-react
 import { Avatar } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Modal } from "@/components/ui/Modal";
+import { ImageLightbox, LightboxTrigger } from "@/components/ui/ImageLightbox";
 import { Field, Input, Textarea } from "@/components/ui/Input";
 import { useToast } from "@/hooks/use-toast";
 import { formatCurrency, formatDate, cn } from "@/lib/utils";
@@ -40,6 +41,7 @@ export default function DesignerRequestDetailPage() {
 
   const [status, setStatus] = useState<"loading" | "error" | "ready">("loading");
   const [error, setError] = useState("");
+  const [viewer, setViewer] = useState<number | null>(null);
   const [request, setRequest] = useState<RequestDetail | null>(null);
   const [myProposal, setMyProposal] = useState<{ id: string; status: string } | null>(null);
   const [interaction, setInteraction] = useState<{ swipeStatus?: string; saved: boolean } | null>(null);
@@ -191,7 +193,7 @@ export default function DesignerRequestDetailPage() {
         </div>
       </div>
 
-      <div className="grid lg:grid-cols-3 gap-12">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-12">
         <div className="lg:col-span-2 flex flex-col gap-10">
           {customer && (
             <div className="flex items-center gap-3 p-4 rounded-md bg-surface-low">
@@ -213,15 +215,21 @@ export default function DesignerRequestDetailPage() {
               <p className="text-label-md text-outline mb-3">INSPIRATION</p>
               <div className="flex gap-4 flex-wrap">
                 {request.inspirationImages.map((img, i) => (
-                  <div key={i} className="relative w-32 h-32 rounded-sm overflow-hidden">
+                  <LightboxTrigger
+                    key={i}
+                    onOpen={() => setViewer(i)}
+                    label={`View reference image ${i + 1} of ${request.inspirationImages.length}`}
+                    className="relative w-28 h-28 sm:w-32 sm:h-32 rounded-sm overflow-hidden"
+                  >
                     <Image src={img} alt="" fill sizes="128px" className="object-cover" />
-                  </div>
+                  </LightboxTrigger>
                 ))}
               </div>
+              <ImageLightbox images={request.inspirationImages} index={viewer} onClose={() => setViewer(null)} onIndexChange={setViewer} />
             </div>
           )}
 
-          <div className="grid sm:grid-cols-2 gap-6">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
             <div>
               <p className="text-label-md text-outline mb-2">CATEGORY & OCCASION</p>
               <p className="text-sm text-ink-variant">{request.category} · {request.occasion} · {request.gender}</p>

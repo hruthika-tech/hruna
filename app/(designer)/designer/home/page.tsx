@@ -90,7 +90,7 @@ export default function DesignerHomePage() {
           </p>
           <h1 className="text-headline-md">Your studio at a glance</h1>
         </div>
-        <div className="flex gap-3">
+        <div className="flex flex-wrap gap-3">
           <LinkButton href="/designer/discover-requests" size="lg">
             <Compass size={17} /> Discover Requests
           </LinkButton>
@@ -100,13 +100,13 @@ export default function DesignerHomePage() {
         </div>
       </div>
 
-      <div className="grid sm:grid-cols-3 gap-6 mb-14">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-6 mb-14">
         <StatCard icon={Inbox} label="Requests Received" value={String(newDirectRequests.length)} href="/designer/requests" />
         <StatCard icon={Hourglass} label="Active Projects" value={String(activeProjects.length)} href="/designer/projects" />
         <StatCard icon={CheckCircle2} label="Completed Projects" value={String(completedProjects.length)} href="/designer/projects" />
       </div>
 
-      <div className="grid lg:grid-cols-2 gap-12">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-12">
         <section>
           <div className="flex items-center justify-between mb-6">
             <h2 className="text-headline-sm">Requests received</h2>

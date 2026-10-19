@@ -89,7 +89,7 @@ export default function AdminDashboardPage() {
       <p className="text-white/50 text-xs tracking-wide uppercase mb-2">Overview</p>
       <h1 className="text-2xl font-display mb-8">Dashboard</h1>
 
-      <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-10">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-10">
         <StatCard icon={Users} label="Total Customers" value={stats.totalCustomers} href="/admin/users" />
         <StatCard icon={Users} label="Total Designers" value={stats.totalDesigners} href="/admin/users" />
         <StatCard icon={ShieldCheck} label="Verified Designers" value={stats.verifiedDesigners} href="/admin/verification" />
@@ -101,7 +101,7 @@ export default function AdminDashboardPage() {
         <StatCard icon={AlertTriangle} label="Pending Disputes" value={stats.pendingDisputes} href="/admin/disputes" tone={stats.pendingDisputes > 0 ? "warning" : undefined} />
       </div>
 
-      <div className="grid lg:grid-cols-5 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
         <section className="lg:col-span-3 border border-white/10 rounded-md p-6">
           <p className="text-sm font-medium mb-5">Recent activity</p>
           {activity.length === 0 ? (

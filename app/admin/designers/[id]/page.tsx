@@ -133,11 +133,11 @@ export default function AdminDesignerReviewPage() {
         </div>
       </div>
 
-      <div className="grid lg:grid-cols-3 gap-10">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-10">
         <div className="lg:col-span-2 flex flex-col gap-10">
           <section className="border border-white/10 rounded-md p-6">
             <p className="text-white/50 text-xs uppercase tracking-wide mb-4">Personal / Identity Status</p>
-            <div className="grid sm:grid-cols-3 gap-4 text-sm mb-6">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-sm mb-6">
               <div><p className="text-white/40 text-xs mb-1">Email</p><p>{emailVerificationLabel(onboarding.emailVerified)}</p></div>
               <div><p className="text-white/40 text-xs mb-1">Phone</p><p>{onboarding.phone || "Not provided"}</p></div>
               <div><p className="text-white/40 text-xs mb-1">Identity</p><p className="capitalize">{verification.identityStatus.replace(/_/g, " ")}</p></div>
@@ -145,7 +145,7 @@ export default function AdminDesignerReviewPage() {
             {verification.identityFailureReason && (
               <p className="text-xs text-red-400 mb-4">Previous failure reason: {verification.identityFailureReason}</p>
             )}
-            <div className="flex gap-3">
+            <div className="flex flex-wrap gap-3">
               <Button size="sm" onClick={() => call("verify-identity").then((ok) => ok && push("Identity verified."))} disabled={busy || verification.identityStatus === "verified"}>
                 <CheckCircle2 size={14} /> Verify Identity
               </Button>
@@ -183,7 +183,7 @@ export default function AdminDesignerReviewPage() {
             {verification.portfolioReviewNote && (
               <p className="text-xs text-amber-400 mb-4">Previous note: {verification.portfolioReviewNote}</p>
             )}
-            <div className="grid sm:grid-cols-3 gap-4 mb-6">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
               {onboarding.portfolioItems.map((item) => (
                 <div key={item.id} className="border border-white/10 rounded-md overflow-hidden">
                   <div className="relative h-32">{item.image && <Image src={item.image} alt={item.title} fill sizes="33vw" className="object-cover" />}</div>
@@ -211,7 +211,7 @@ export default function AdminDesignerReviewPage() {
 
           <section className="border border-white/10 rounded-md p-6">
             <p className="text-white/50 text-xs uppercase tracking-wide mb-4">Studio</p>
-            <div className="grid sm:grid-cols-2 gap-4 text-sm">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
               <div><p className="text-white/40 text-xs mb-1">Studio name</p><p>{onboarding.studioName || "—"}</p></div>
               <div><p className="text-white/40 text-xs mb-1">Location</p><p>{[onboarding.area, onboarding.city].filter(Boolean).join(", ") || "—"}</p></div>
               <div><p className="text-white/40 text-xs mb-1">Service area</p><p>{onboarding.serviceLocations.join(", ") || "—"}</p></div>

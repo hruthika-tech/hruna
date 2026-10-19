@@ -8,6 +8,7 @@ import { StatusBadge } from "@/components/ui/Badge";
 import { Avatar } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Modal } from "@/components/ui/Modal";
+import { ImageLightbox, LightboxTrigger } from "@/components/ui/ImageLightbox";
 import { useToast } from "@/hooks/use-toast";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import type { DesignerSummary } from "@/lib/customer/data";
@@ -48,6 +49,7 @@ export default function RequestDetailsPage() {
 
   const [status, setStatus] = useState<"loading" | "error" | "ready">("loading");
   const [error, setError] = useState("");
+  const [viewer, setViewer] = useState<number | null>(null);
   const [request, setRequest] = useState<RequestDetail | null>(null);
   const [proposals, setProposals] = useState<ProposalWithDesigner[]>([]);
   const [decliningId, setDecliningId] = useState<string | null>(null);
@@ -137,7 +139,7 @@ export default function RequestDetailsPage() {
         <StatusBadge status={request.status} />
       </div>
 
-      <div className="grid lg:grid-cols-3 gap-12">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-12">
         <div className="lg:col-span-2 flex flex-col gap-10">
           <div>
             <p className="text-label-md text-outline mb-3">DESCRIPTION</p>
@@ -149,15 +151,21 @@ export default function RequestDetailsPage() {
               <p className="text-label-md text-outline mb-3">INSPIRATION</p>
               <div className="flex gap-4 flex-wrap">
                 {request.inspirationImages.map((img, i) => (
-                  <div key={i} className="relative w-32 h-32 rounded-sm overflow-hidden">
+                  <LightboxTrigger
+                    key={i}
+                    onOpen={() => setViewer(i)}
+                    label={`View reference image ${i + 1} of ${request.inspirationImages.length}`}
+                    className="relative w-28 h-28 sm:w-32 sm:h-32 rounded-sm overflow-hidden"
+                  >
                     <Image src={img} alt="" fill sizes="128px" className="object-cover" />
-                  </div>
+                  </LightboxTrigger>
                 ))}
               </div>
+              <ImageLightbox images={request.inspirationImages} index={viewer} onClose={() => setViewer(null)} onIndexChange={setViewer} />
             </div>
           )}
 
-          <div className="grid sm:grid-cols-2 gap-6">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
             <div>
               <p className="text-label-md text-outline mb-2">MEASUREMENTS</p>
               <ul className="text-sm text-ink-variant flex flex-col gap-1">
@@ -202,7 +210,7 @@ export default function RequestDetailsPage() {
                     </div>
                   </div>
                   <p className="text-ink-variant text-sm leading-relaxed">{p.description}</p>
-                  <div className="grid grid-cols-2 gap-4 text-sm">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
                     <div className="flex items-center gap-2"><Wallet size={16} className="text-outline" /><span>{formatCurrency(p.price)} (proposed)</span></div>
                     <div className="flex items-center gap-2"><Calendar size={16} className="text-outline" /><span>{p.estimatedDays} days</span></div>
                   </div>
@@ -213,7 +221,7 @@ export default function RequestDetailsPage() {
                       <StatusBadge status={p.status} />
                     </div>
                   ) : (
-                    <div className="flex gap-3 pt-2 border-t border-outline-variant">
+                    <div className="flex flex-wrap gap-3 pt-2 border-t border-outline-variant">
                       <Button
                         className="flex-1 justify-center"
                         disabled={acceptingId === p.id}

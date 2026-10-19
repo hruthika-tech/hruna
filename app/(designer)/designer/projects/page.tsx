@@ -76,21 +76,21 @@ export default function DesignerProjectsPage() {
           />
 
           {filtered.length > 0 ? (
-            <div className="grid md:grid-cols-2 gap-6 mt-8">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-8">
               {filtered.map((p) => (
                 <Link key={p.id} href={`/designer/projects/${p.id}`}>
                   <Card hover>
                     <CardBody className="flex flex-col gap-4">
-                      <div className="flex items-start justify-between">
-                        <div className="flex items-center gap-3">
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="flex items-center gap-3 min-w-0">
                           {p.referenceImages[0] && (
                             <div className="relative w-14 h-14 rounded-sm overflow-hidden shrink-0">
                               <Image src={p.referenceImages[0]} alt="" fill sizes="56px" className="object-cover" />
                             </div>
                           )}
-                          <p className="font-display text-lg leading-tight">{p.title}</p>
+                          <p className="font-display text-lg leading-tight break-words min-w-0">{p.title}</p>
                         </div>
-                        <StatusBadge status={p.status} />
+                        <span className="shrink-0"><StatusBadge status={p.status} /></span>
                       </div>
                       <div>
                         <div className="flex justify-between text-xs text-outline mb-1.5"><span>{p.stage}</span><span>{p.progressPercent}%</span></div>

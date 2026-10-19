@@ -1,8 +1,8 @@
 "use client";
 
-import { Suspense, useEffect, useRef, useState } from "react";
-import { useSearchParams } from "next/navigation";
-import { Send, Search, ImagePlus, Loader2, MessageCircle } from "lucide-react";
+import { Suspense, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { ArrowLeft, Send, Search, ImagePlus, Loader2, MessageCircle } from "lucide-react";
 import { Avatar, Badge } from "@/components/ui/Badge";
 import { useToast } from "@/hooks/use-toast";
 import { cn, timeAgo } from "@/lib/utils";
@@ -66,6 +66,15 @@ function MessagesPageContent() {
   // written in the meantime) — without the loading spinner, which is only for switching conversations.
   const [refreshTick, setRefreshTick] = useState(0);
   const loadedConversationId = useRef("");
+  const router = useRouter();
+  const pathname = usePathname();
+  // Phones show one pane at a time: the inbox, or — when the URL names a conversation — that chat.
+  // Opening a chat from the inbox pushes ?conversationId=, so the phone's Back returns to the inbox.
+  const chatOpenOnPhone = !!searchParams.get("conversationId");
+  const pushedChat = useRef(false);
+  // The thread follows new messages only while the reader is at (or near) the bottom of it.
+  const threadRef = useRef<HTMLDivElement>(null);
+  const stickToBottom = useRef(true);
 
   // Newest conversation first, the same order the API returns.
   const byLatest = (list: ConversationPreview[]) =>
@@ -77,7 +86,7 @@ function MessagesPageContent() {
     const refresh = async () => {
       if (document.visibilityState !== "visible") return;
       try {
-        const res = await fetch("C:/Program Files/Git/api/conversations");
+        const res = await fetch("/api/conversations");
         const data = await res.json();
         if (res.ok) setConversations(data.conversations);
       } catch {
@@ -106,7 +115,8 @@ function MessagesPageContent() {
         setConversations(convData.conversations);
         setMyUserId(sessionData.userId ?? "");
         const requested = searchParams.get("conversationId");
-        setActiveId(requested ?? convData.conversations[0]?.id ?? "");
+        const isPhone = window.matchMedia("(max-width: 767px)").matches;
+        setActiveId(requested ?? (isPhone ? "" : convData.conversations[0]?.id) ?? "");
         setStatus("ready");
       } catch (err) {
         if (!cancelled) {
@@ -133,7 +143,10 @@ function MessagesPageContent() {
     }
     let cancelled = false;
     const switching = loadedConversationId.current !== activeId;
-    if (switching) setMessagesLoading(true);
+    if (switching) {
+      setMessagesLoading(true);
+      stickToBottom.current = true;
+    }
     (async () => {
       try {
         const res = await fetch(`/api/conversations/${activeId}/messages`);
@@ -184,6 +197,7 @@ function MessagesPageContent() {
         if (data.code === "messaging_blocked") setBlockState(data.blockState === "blocked_by_me" ? "blocked_by_me" : "unavailable");
         throw new Error(data.message ?? "Message couldn't be sent.");
       }
+      stickToBottom.current = true;
       setMessages((prev) => [...prev, data.message]);
       // Keep the inbox in step with the thread: this conversation's card now shows the message just
       // sent and its time, and moves to the top (the list is newest-first) — the same card, never a new one.
@@ -201,6 +215,45 @@ function MessagesPageContent() {
     }
   };
 
+  const openConversation = (id: string) => {
+    setActiveId(id);
+    if (window.matchMedia("(max-width: 767px)").matches) {
+      pushedChat.current = true;
+      router.push(`${pathname}?conversationId=${id}`, { scroll: false });
+    }
+  };
+
+  const backToInbox = () => {
+    if (pushedChat.current) {
+      pushedChat.current = false;
+      router.back();
+    } else {
+      router.replace(pathname, { scroll: false });
+    }
+  };
+
+  // Open a thread at its latest message, and follow new ones (incl. when the phone keyboard opens
+  // and shrinks the view) unless the reader has scrolled up into the history. `threadShown` matters
+  // on a deep link, where the messages can arrive before the inbox (and so the thread) has rendered.
+  const threadShown = status === "ready" && !!active;
+  useLayoutEffect(() => {
+    const el = threadRef.current;
+    if (el && stickToBottom.current) el.scrollTop = el.scrollHeight;
+  }, [messages, messagesLoading, activeId, chatOpenOnPhone, threadShown]);
+
+  useEffect(() => {
+    const keepBottom = () => {
+      const el = threadRef.current;
+      if (el && stickToBottom.current) el.scrollTop = el.scrollHeight;
+    };
+    window.visualViewport?.addEventListener("resize", keepBottom);
+    window.addEventListener("resize", keepBottom);
+    return () => {
+      window.visualViewport?.removeEventListener("resize", keepBottom);
+      window.removeEventListener("resize", keepBottom);
+    };
+  }, []);
+
   const visibleConversations = conversations.filter((c) => {
     const query = conversationSearch.trim().toLowerCase();
     if (!query) return true;
@@ -211,7 +264,7 @@ function MessagesPageContent() {
   return (
     <div className="container-editorial py-8 pb-section-gap">
       <p className="text-label-md text-outline mb-2">MESSAGES</p>
-      <h1 className="text-headline-md mb-8">Conversations</h1>
+      <h1 className="text-headline-md mb-6 md:mb-8">Conversations</h1>
 
       {status === "loading" && (
         <div className="flex items-center justify-center gap-2 text-ink-variant py-24">
@@ -226,9 +279,15 @@ function MessagesPageContent() {
       )}
 
       {status === "ready" && (
-        <div className="grid md:grid-cols-3 border border-outline-variant rounded-md overflow-hidden h-[640px]">
+        <div
+          data-testid="messages-panel"
+          className={cn(
+            "border border-outline-variant rounded-md overflow-hidden bg-surface md:grid md:grid-cols-3 md:h-[640px]",
+            chatOpenOnPhone && "max-md:fixed max-md:inset-x-0 max-md:top-[81px] max-md:bottom-0 max-md:z-30 max-md:flex max-md:flex-col max-md:rounded-none max-md:border-x-0 max-md:border-b-0"
+          )}
+        >
           {/* Conversation list */}
-          <div className="border-r border-outline-variant flex flex-col">
+          <div className={cn("md:border-r border-outline-variant flex-col min-h-0 min-w-0", chatOpenOnPhone ? "hidden md:flex" : "flex")} data-testid="conversation-list">
             <div className="p-4 border-b border-outline-variant">
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-outline" size={16} />
@@ -236,11 +295,12 @@ function MessagesPageContent() {
                   value={conversationSearch}
                   onChange={(e) => setConversationSearch(e.target.value)}
                   placeholder="Search conversations"
-                  className="w-full pl-9 pr-3 py-2 rounded-full bg-surface-low text-sm border border-outline-variant"
+                  aria-label="Search conversations"
+                  className="w-full pl-9 pr-3 py-2 rounded-full bg-surface-low text-base md:text-sm border border-outline-variant"
                 />
               </div>
             </div>
-            <div className="flex-1 overflow-y-auto">
+            <div className="flex-1 md:overflow-y-auto">
               {conversations.length === 0 ? (
                 <div className="p-6 text-center">
                   <MessageCircle className="mx-auto text-outline mb-3" size={28} />
@@ -257,7 +317,7 @@ function MessagesPageContent() {
                   return (
                     <button
                       key={c.id}
-                      onClick={() => setActiveId(c.id)}
+                      onClick={() => openConversation(c.id)}
                       className={cn(
                         "w-full flex items-center gap-3 p-4 text-left border-b border-outline-variant hover:bg-surface-low transition-colors",
                         activeId === c.id && "bg-primary-container/40"
@@ -265,7 +325,7 @@ function MessagesPageContent() {
                     >
                       <Avatar src={designer.avatar} alt={designer.name} size={40} />
                       <div className="min-w-0 flex-1">
-                        <div className="flex items-center justify-between">
+                        <div className="flex items-center justify-between gap-2">
                           <p className="text-sm font-medium truncate">{designer.studioName}</p>
                           <span className="text-[11px] text-outline shrink-0">{c.lastTimestamp ? timeAgo(c.lastTimestamp) : ""}</span>
                         </div>
@@ -280,12 +340,20 @@ function MessagesPageContent() {
           </div>
 
           {/* Active chat */}
-          <div className="md:col-span-2 flex flex-col">
+          <div className={cn("md:col-span-2 flex-col min-h-0 min-w-0", chatOpenOnPhone ? "flex flex-1" : "hidden md:flex")} data-testid="chat-pane">
             {active ? (
               <>
-                <div className="flex items-center gap-3 p-4 border-b border-outline-variant">
+                <div className="flex items-center gap-3 px-3 py-3 md:p-4 border-b border-outline-variant shrink-0">
+                  <button
+                    type="button"
+                    onClick={backToInbox}
+                    aria-label="Back to conversations"
+                    className="md:hidden -ml-1 w-10 h-10 shrink-0 flex items-center justify-center rounded-full text-ink hover:bg-ink/5"
+                  >
+                    <ArrowLeft size={20} />
+                  </button>
                   {active.designer && <Avatar src={active.designer.avatar} alt={active.designer.name} size={38} verified={active.designer.verified} />}
-                  <p className="font-medium text-sm">{active.designer?.studioName}</p>
+                  <p className="font-medium text-sm truncate min-w-0">{active.designer?.studioName}</p>
                   {!active.isSelf && (
                     <ConversationMenu
                       conversationId={active.id}
@@ -303,7 +371,15 @@ function MessagesPageContent() {
                     This conversation is between your own customer profile and your own studio, so every message in it was sent by you and appears on your side.
                   </p>
                 )}
-                <div className="flex-1 overflow-y-auto p-5 flex flex-col gap-3">
+                <div
+                  ref={threadRef}
+                  onScroll={(e) => {
+                    const el = e.currentTarget;
+                    stickToBottom.current = el.scrollHeight - el.scrollTop - el.clientHeight < 120;
+                  }}
+                  className="flex-1 min-h-0 overflow-y-auto overscroll-contain p-4 md:p-5 flex flex-col gap-3"
+                  data-testid="message-thread"
+                >
                   {messagesLoading ? (
                     <div className="flex items-center justify-center h-full text-ink-variant text-sm gap-2">
                       <Loader2 className="animate-spin" size={16} /> Loading messages…
@@ -316,7 +392,7 @@ function MessagesPageContent() {
                           <div key={m.id} className={cn("flex", isMe ? "justify-end" : "justify-start")}>
                             <div
                               className={cn(
-                                "max-w-[75%] rounded-2xl px-4 py-2.5 text-sm",
+                                "max-w-[85%] md:max-w-[75%] rounded-2xl px-4 py-2.5 text-sm whitespace-pre-wrap [overflow-wrap:anywhere]",
                                 isMe ? "bg-primary text-white rounded-br-sm" : "bg-surface-low text-ink rounded-bl-sm"
                               )}
                             >
@@ -334,9 +410,9 @@ function MessagesPageContent() {
                 {blockState !== "none" ? (
                   <BlockedNotice state={blockState} settingsHref="/profile?tab=blocked" />
                 ) : (
-                <div className="p-4 border-t border-outline-variant flex items-center gap-2">
+                <div className="px-3 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] md:p-4 border-t border-outline-variant flex items-center gap-2 shrink-0 bg-surface">
                   <button
-                    className="p-2 text-outline/50 cursor-not-allowed"
+                    className="p-2 shrink-0 text-outline/50 cursor-not-allowed"
                     aria-label="Attach image (coming soon)"
                     title="Attaching images is coming soon"
                     disabled
@@ -346,15 +422,17 @@ function MessagesPageContent() {
                   <input
                     value={draft}
                     onChange={(e) => setDraft(e.target.value)}
-                    onKeyDown={(e) => e.key === "Enter" && handleSend()}
+                    onKeyDown={(e) => e.key === "Enter" && !e.nativeEvent.isComposing && handleSend()}
                     placeholder="Type a message..."
-                    className="flex-1 px-4 py-2.5 rounded-full bg-surface-low border border-outline-variant text-sm"
+                    aria-label="Message"
+                    enterKeyHint="send"
+                    className="flex-1 min-w-0 px-4 py-2.5 rounded-full bg-surface-low border border-outline-variant text-base md:text-sm"
                   />
                   <button
                     onClick={handleSend}
                     disabled={sending || !draft.trim()}
                     aria-label="Send message"
-                    className="p-2.5 rounded-full bg-primary text-white hover:scale-105 transition-transform disabled:opacity-60"
+                    className="p-2.5 shrink-0 rounded-full bg-primary text-white hover:scale-105 transition-transform disabled:opacity-60"
                   >
                     <Send size={16} />
                   </button>
@@ -362,7 +440,12 @@ function MessagesPageContent() {
                 )}
               </>
             ) : (
-              <div className="flex-1 flex items-center justify-center text-outline text-sm">Select a conversation</div>
+              <div className="flex-1 flex flex-col items-center justify-center gap-3 text-outline text-sm">
+                Select a conversation
+                <button type="button" onClick={backToInbox} className="md:hidden text-primary hover:underline">
+                  Back to conversations
+                </button>
+              </div>
             )}
           </div>
         </div>

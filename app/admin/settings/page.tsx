@@ -66,7 +66,7 @@ export default function AdminSettingsPage() {
           <Loader2 className="animate-spin" size={18} /> Loading settings…
         </div>
       ) : (
-        <div className="grid lg:grid-cols-2 gap-6">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           {/* Admin profile */}
           <section className="border border-white/10 rounded-md p-6">
             <p className="text-sm font-medium mb-4">Admin profile</p>

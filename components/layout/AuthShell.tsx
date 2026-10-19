@@ -15,7 +15,7 @@ export function AuthShell({
   quote?: string;
 }) {
   return (
-    <div className="min-h-screen grid lg:grid-cols-2">
+    <div className="min-h-screen grid grid-cols-1 lg:grid-cols-2">
       <div className="flex flex-col justify-center px-6 md:px-20 py-16">
         <Link href="/" className="font-display text-2xl tracking-[0.2em] mb-16">HRUNA</Link>
         <div className="w-full max-w-sm mx-auto lg:mx-0">{children}</div>

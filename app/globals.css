@@ -8,6 +8,8 @@
   }
   body {
     @apply bg-surface text-ink font-body antialiased;
+    /* Long unbroken strings (URLs, emails, pasted text) wrap instead of widening the page. */
+    overflow-wrap: break-word;
   }
   h1, h2, h3, h4 {
     @apply font-display text-ink;

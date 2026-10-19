@@ -20,7 +20,7 @@ export function Hero() {
       <FlowerDoodle className="hidden sm:block absolute bottom-40 left-[14%] text-scrapbook-moss/70 animate-[fadeIn_1s_ease-out_0.9s_both]" size={26} />
       <StarDoodle className="hidden md:block absolute top-1/3 right-[6%] text-scrapbook-midnight/50 animate-[fadeIn_1s_ease-out_1.1s_both]" size={16} />
 
-      <div className="container-editorial grid md:grid-cols-[1.1fr_0.9fr] gap-12 items-center py-20">
+      <div className="container-editorial grid grid-cols-1 md:grid-cols-[1.1fr_0.9fr] gap-12 items-center py-20">
         <div>
           <span className="font-display text-6xl sm:text-7xl md:text-8xl text-scrapbook-forest tracking-tight flex">
             {WORDMARK.map((letter, i) => (
@@ -48,12 +48,12 @@ export function Hero() {
               Explore Hruna
             </AnimatedCTA>
             <AnimatedCTA
-              href="/become-a-designer"
+              href="/discover"
               size="lg"
               variant="secondary"
               className="border-scrapbook-forest/30 text-scrapbook-forest hover:bg-scrapbook-forest/5"
             >
-              I'm a Designer
+              Explore Designers
             </AnimatedCTA>
           </div>
         </div>

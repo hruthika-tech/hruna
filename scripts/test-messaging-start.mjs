@@ -113,8 +113,8 @@ async function main() {
       // The customer sends from the UI.
       await page.getByPlaceholder("Type a message...").fill("Hello from the proposal page");
       await page.getByLabel("Send message").click();
-      await page.locator("div.overflow-y-auto.p-5").getByText("Hello from the proposal page", { exact: true }).waitFor({ state: "visible", timeout: 15000 }).catch(() => undefined);
-      check("1c. Browser: the customer's message is sent and shown in the thread", (await page.locator("div.overflow-y-auto.p-5").getByText("Hello from the proposal page", { exact: true }).count()) > 0);
+      await page.locator('[data-testid="message-thread"]').getByText("Hello from the proposal page", { exact: true }).waitFor({ state: "visible", timeout: 15000 }).catch(() => undefined);
+      check("1c. Browser: the customer's message is sent and shown in the thread", (await page.locator('[data-testid="message-thread"]').getByText("Hello from the proposal page", { exact: true }).count()) > 0);
       await context.close();
     } else {
       const r = await api("/api/conversations", { method: "POST", cookie: customer, body: { designerId: DESIGNER_PROFILE } });

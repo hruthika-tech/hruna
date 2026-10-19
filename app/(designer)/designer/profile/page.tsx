@@ -190,11 +190,11 @@ export default function DesignerProfilePage() {
 
   return (
     <div className="container-editorial py-12 pb-section-gap">
-      <div className="flex items-center gap-4 mb-10">
+      <div className="flex flex-wrap items-center gap-4 mb-10">
         <Avatar src={profile.avatar} alt={profile.displayName} size={64} verified={verification?.overallStatus === "approved"} />
-        <div className="flex-1">
-          <h1 className="text-headline-md">{profile.displayName || "Your name"}</h1>
-          <p className="text-ink-variant text-sm">{email}</p>
+        <div className="flex-1 min-w-0">
+          <h1 className="text-headline-md break-words">{profile.displayName || "Your name"}</h1>
+          <p className="text-ink-variant text-sm break-all">{email}</p>
         </div>
         {completedCount > 0 && (
           <div className="flex items-center gap-2 px-4 py-2 rounded-full bg-primary-container text-primary-on-container text-sm">
@@ -216,7 +216,7 @@ export default function DesignerProfilePage() {
               {pendingEmail && <p className="text-sm text-ink-variant mt-2">Waiting for confirmation: {pendingEmail}</p>}
               <Link href="/account/email" className="text-sm text-primary hover:underline mt-2 inline-block">Change email →</Link>
             </div>
-            <div className="flex gap-3 mt-2">
+            <div className="flex flex-wrap gap-3 mt-2">
               <Button onClick={saveProfile} disabled={saving}>{saving ? "Saving…" : "Save Changes"}</Button>
               <LinkButton href="/designer/studio/manage" variant="secondary">Manage Studio</LinkButton>
               <LinkButton href="/designer-subscription" variant="secondary">Manage Subscription</LinkButton>

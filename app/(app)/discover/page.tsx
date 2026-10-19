@@ -135,7 +135,7 @@ export default function DiscoverPage() {
         <>
           <p className="text-sm text-outline mb-6">{results.length} designer{results.length !== 1 && "s"} found</p>
           {results.length > 0 ? (
-            <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
               {results.map((d) => (
                 <DesignerCard key={d.id} designer={d} />
               ))}

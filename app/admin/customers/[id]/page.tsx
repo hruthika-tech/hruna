@@ -129,11 +129,11 @@ export default function AdminCustomerDetailPage() {
         </div>
       </div>
 
-      <div className="grid lg:grid-cols-3 gap-10">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-10">
         <div className="lg:col-span-2 flex flex-col gap-10">
           <section className="border border-white/10 rounded-md p-6">
             <p className="text-white/50 text-xs uppercase tracking-wide mb-4">Contact</p>
-            <div className="grid sm:grid-cols-3 gap-4 text-sm">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-sm">
               <div className="flex items-center gap-2"><Mail size={14} className="text-white/40" />{customer.email || "—"}</div>
               <div className="flex items-center gap-2"><Phone size={14} className="text-white/40" />{customer.phone || "—"}</div>
               <div className="flex items-center gap-2"><MapPin size={14} className="text-white/40" />{customer.city || "—"}</div>
