@@ -4,6 +4,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/supabase/types";
 import { isPostgrestError } from "@/lib/supabase/errors";
 import { getDesignerSummaries } from "@/lib/customer/data";
+import { OPEN_REQUEST_STATUSES } from "@/lib/requests/lifecycle";
 
 /**
  * The customer and designer notification feeds, shared by the notification pages and the navbar
@@ -84,12 +85,17 @@ export async function designerFeed(supabase: Db, ctx: { designerId: string }): P
 
   const items: NotificationItem[] = [];
   if (verification?.overall_status === "approved") {
-    const { data: interactions } = await supabase.from("designer_request_interactions").select("request_id").eq("designer_id", ctx.designerId);
-    const interactedIds = new Set((interactions ?? []).map((i) => i.request_id));
+    // Same rule as the Discover feed (app/api/designer/feed): open requests, minus this designer's own
+    // interactions and proposals — another designer's proposal doesn't end the customer's search.
+    const [{ data: interactions }, { data: ownProposals }] = await Promise.all([
+      supabase.from("designer_request_interactions").select("request_id").eq("designer_id", ctx.designerId),
+      supabase.from("proposals").select("request_id").eq("designer_id", ctx.designerId),
+    ]);
+    const interactedIds = new Set([...(interactions ?? []), ...(ownProposals ?? [])].map((i) => i.request_id));
     const { data: recentRequests } = await supabase
       .from("fashion_requests")
       .select("id, title, created_at")
-      .eq("status", "submitted")
+      .in("status", [...OPEN_REQUEST_STATUSES])
       .is("preferred_designer_id", null)
       .order("created_at", { ascending: false })
       .limit(8);

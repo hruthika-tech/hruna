@@ -12,6 +12,7 @@ import { Field, Input, Textarea } from "@/components/ui/Input";
 import { useToast } from "@/hooks/use-toast";
 import { formatCurrency, formatDate, cn } from "@/lib/utils";
 import type { CustomerSummary } from "@/lib/designer/data";
+import { isRequestOpenForProposals } from "@/lib/requests/lifecycle";
 
 interface RequestDetail {
   id: string;
@@ -31,6 +32,7 @@ interface RequestDetail {
   budgetMin: number;
   budgetMax: number;
   preferredDesignerId?: string;
+  status: string;
   customer?: CustomerSummary;
 }
 
@@ -274,8 +276,12 @@ export default function DesignerRequestDetailPage() {
               <p className="text-sm text-emerald-700 bg-emerald-50 rounded px-3 py-2 text-center">
                 Proposal sent{myProposal.status === "accepted" ? " — accepted ✓" : myProposal.status === "declined" ? " — declined" : " ✓"}
               </p>
-            ) : (
+            ) : isRequestOpenForProposals(request.status) ? (
               <Button onClick={() => setProposalOpen(true)}>Send Proposal</Button>
+            ) : (
+              <p className="text-sm text-ink-variant bg-surface-low rounded px-3 py-2 text-center" data-testid="request-closed">
+                No longer accepting proposals — the customer has chosen a designer.
+              </p>
             )}
             <Button variant="secondary" onClick={handleMessage} disabled={messaging}>
               {messaging ? "Opening…" : "Message Customer"}

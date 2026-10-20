@@ -6,7 +6,9 @@
  * designer generally can't even SEE an eligible request to propose on in the first place — see
  * app/api/designer/feed/route.ts's comment — but requireApprovedDesigner() gives a clear, honest
  * error instead of a generic RLS 42501 for the case where they somehow have a request id).
- * Creating a proposal never touches fashion_requests — the original customer request is untouched.
+ * Creating a proposal never touches fashion_requests' content — the original customer request is
+ * untouched (only its status may move submitted → proposal_received, below). A request that is no
+ * longer open (the customer accepted a proposal) refuses new proposals with a clear 409.
  */
 
 import { NextResponse } from "next/server";
@@ -15,6 +17,7 @@ import { requireApprovedDesigner } from "@/lib/supabase/authorization";
 import { errorResponse } from "@/lib/supabase/errors";
 import { mapProposal, mapRequest, resolveRequestImages } from "@/lib/designer/data";
 import type { TablesInsert } from "@/lib/supabase/types";
+import { isRequestOpenForProposals, REQUEST_CLOSED_MESSAGE } from "@/lib/requests/lifecycle";
 
 export const dynamic = "force-dynamic";
 
@@ -69,6 +72,15 @@ export async function POST(request: Request) {
     }
 
     const supabase = createClient();
+    // Read with the designer's own client (RLS): a request they can't see falls through to the insert,
+    // which RLS refuses as before. A visible but closed request gets a clear answer instead of a stray
+    // pending proposal that could never be accepted.
+    const { data: target, error: targetError } = await supabase.from("fashion_requests").select("status").eq("id", requestId).maybeSingle();
+    if (targetError) throw targetError;
+    if (target && !isRequestOpenForProposals(target.status)) {
+      return NextResponse.json({ status: "error", code: "request_closed", message: REQUEST_CLOSED_MESSAGE }, { status: 409 });
+    }
+
     const insert: TablesInsert<"proposals"> = {
       request_id: requestId,
       designer_id: ctx.designerId,
@@ -79,6 +91,11 @@ export async function POST(request: Request) {
     };
 
     const { data, error } = await supabase.from("proposals").insert(insert).select().single();
+    // The customer accepted another proposal between the check above and this insert: the database
+    // (guard_proposal_insert_open_request, serialised with accept_proposal) refused it — same answer.
+    if (error && error.code === "P0001" && error.message.startsWith("request_closed")) {
+      return NextResponse.json({ status: "error", code: "request_closed", message: REQUEST_CLOSED_MESSAGE }, { status: 409 });
+    }
     if (error) throw error;
 
     // Moves the request submitted -> proposal_received (a real status this project's own schema
