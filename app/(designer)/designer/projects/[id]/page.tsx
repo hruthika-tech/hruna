@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import Image from "next/image";
 import { useParams, useRouter } from "next/navigation";
-import { Mail, Phone, MapPin, MessageCircle, Plus, Pencil, Trash2, Check, CheckCircle2, Hourglass, Loader2 } from "lucide-react";
+import { Mail, Phone, MapPin, MessageCircle, Plus, Pencil, Trash2, Check, CheckCircle2, Hourglass, Loader2, Lock } from "lucide-react";
 import { SafeImage } from "@/components/ui/SafeImage";
 import { Badge } from "@/components/ui/Badge";
 import { Timeline, ProgressBar } from "@/components/ui/Progress";
@@ -16,6 +16,7 @@ import { useToast } from "@/hooks/use-toast";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import type { UploadedImage } from "@/lib/customer/upload-client";
 import type { CustomerSummary } from "@/lib/designer/data";
+import { isProgressLocked } from "@/lib/projects/progress-lock";
 
 interface ProjectDetail {
   id: string;
@@ -98,12 +99,14 @@ export default function DesignerProjectWorkspacePage() {
   }, [params.id]);
 
   const openNew = () => {
+    if (isProgressLocked(project?.status)) return; // final once the customer approved completion
     setEditingId(null);
     setDraft({ stage: project?.stage ?? "Request Accepted", note: "", images: [] });
     setModalOpen(true);
   };
 
   const openEdit = (u: ProgressUpdateItem) => {
+    if (isProgressLocked(project?.status)) return; // final once the customer approved completion
     setEditingId(u.id);
     setDraft({
       stage: u.stage,
@@ -114,7 +117,7 @@ export default function DesignerProjectWorkspacePage() {
   };
 
   const saveDraft = async () => {
-    if (!draft.note.trim()) return;
+    if (!draft.note.trim() || isProgressLocked(project?.status)) return;
     setSaving(true);
     try {
       const body = { stage: draft.stage, note: draft.note, imageFileIds: draft.images.map((i) => i.fileId).filter(Boolean) };
@@ -149,6 +152,7 @@ export default function DesignerProjectWorkspacePage() {
   };
 
   const deleteUpdate = async (id: string) => {
+    if (isProgressLocked(project?.status)) return; // final once the customer approved completion
     try {
       const res = await fetch(`/api/projects/${params.id}/updates/${id}`, { method: "DELETE" });
       if (!res.ok) {
@@ -196,6 +200,7 @@ export default function DesignerProjectWorkspacePage() {
   };
 
   const saveStage = async (newStage: string) => {
+    if (isProgressLocked(project?.status)) return; // final once the customer approved completion
     try {
       const res = await fetch(`/api/projects/${params.id}/updates`, {
         method: "POST",
@@ -231,6 +236,9 @@ export default function DesignerProjectWorkspacePage() {
   }
 
   const customer = project.customer;
+  // Customer-approved completion makes the progress history final: no add / edit / delete / stage
+  // change (the API and database refuse these too — this only keeps the controls out of view).
+  const progressLocked = isProgressLocked(project.status);
 
   return (
     <div className="container-editorial py-12 pb-section-gap">
@@ -314,9 +322,15 @@ export default function DesignerProjectWorkspacePage() {
           <section>
             <div className="flex items-center justify-between mb-2">
               <p className="text-label-md text-outline">PROGRESS UPDATES</p>
-              <Button size="sm" onClick={openNew}><Plus size={14} /> Add Update</Button>
+              {!progressLocked && <Button size="sm" onClick={openNew}><Plus size={14} /> Add Update</Button>}
             </div>
-            <ProgressBar percent={project.progressPercent} className="mb-8" />
+            <ProgressBar percent={project.progressPercent} className={progressLocked ? "mb-4" : "mb-8"} />
+            {progressLocked && (
+              <p data-testid="progress-locked-note" className="flex items-start gap-2 text-xs text-ink-variant bg-surface-low rounded-md px-3 py-2.5 mb-6">
+                <Lock size={13} className="shrink-0 mt-0.5" aria-hidden="true" />
+                The customer approved this project's completion, so its progress history is final — updates can no longer be added, edited or deleted.
+              </p>
+            )}
             <div className="flex flex-col gap-6">
               {[...updates].reverse().map((u) => (
                 <div key={u.id} className="flex gap-4 border-b border-outline-variant pb-6 last:border-none group">
@@ -336,13 +350,15 @@ export default function DesignerProjectWorkspacePage() {
                     </div>
                     <p className="text-sm text-ink-variant">{u.note}</p>
                   </div>
-                  <div className="flex flex-col gap-1 lg:opacity-0 lg:group-hover:opacity-100 lg:focus-within:opacity-100 transition-opacity">
-                    <button onClick={() => openEdit(u)} aria-label="Edit update" className="p-2.5 lg:p-1.5 text-outline hover:text-primary"><Pencil size={14} /></button>
-                    <button onClick={() => deleteUpdate(u.id)} aria-label="Delete update" className="p-2.5 lg:p-1.5 text-outline hover:text-error"><Trash2 size={14} /></button>
-                  </div>
+                  {!progressLocked && (
+                    <div className="flex flex-col gap-1 lg:opacity-0 lg:group-hover:opacity-100 lg:focus-within:opacity-100 transition-opacity">
+                      <button onClick={() => openEdit(u)} aria-label="Edit update" className="p-2.5 lg:p-1.5 text-outline hover:text-primary"><Pencil size={14} /></button>
+                      <button onClick={() => deleteUpdate(u.id)} aria-label="Delete update" className="p-2.5 lg:p-1.5 text-outline hover:text-error"><Trash2 size={14} /></button>
+                    </div>
+                  )}
                 </div>
               ))}
-              {updates.length === 0 && <p className="text-sm text-outline">No progress updates yet — add the first one.</p>}
+              {updates.length === 0 && <p className="text-sm text-outline">{progressLocked ? "No progress updates were posted for this project." : "No progress updates yet — add the first one."}</p>}
             </div>
           </section>
         </div>
@@ -366,14 +382,14 @@ export default function DesignerProjectWorkspacePage() {
           <div className="p-6 rounded-md bg-surface-low">
             <div className="flex items-center justify-between mb-4">
               <p className="text-label-md text-outline">TIMELINE</p>
-              {stagePicker === null ? (
+              {stagePicker === null && !progressLocked ? (
                 <button onClick={() => setStagePicker(project.stage)} className="text-xs text-primary hover:underline">Update stage</button>
               ) : null}
             </div>
             <Timeline stages={project.stages} currentStage={project.stage} />
             <p className="text-xs text-outline mt-2 mb-4">Due {formatDate(project.dueDate)}</p>
 
-            {stagePicker !== null && (
+            {stagePicker !== null && !progressLocked && (
               <div className="flex flex-col gap-2 pt-4 border-t border-outline-variant">
                 <Select value={stagePicker} onChange={(e) => setStagePicker(e.target.value)}>
                   {project.stages.map((s) => <option key={s}>{s}</option>)}

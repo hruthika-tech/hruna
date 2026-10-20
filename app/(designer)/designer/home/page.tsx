@@ -110,14 +110,14 @@ export default function DesignerHomePage() {
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 lg:gap-8">
           <section className={PANEL}>
-            <div className="flex items-center justify-between gap-4 mb-5">
+            <div className={SECTION_HEAD}>
               <h2 className="text-headline-sm">Requests received</h2>
               <Link href="/designer/requests" className="text-sm text-primary hover:underline flex items-center gap-1">View all <ArrowRight size={14} /></Link>
             </div>
             <div className="flex flex-col gap-4">
               {directRequests.length > 0 ? directRequests.slice(0, 4).map((r) => (
                 <Link key={r.id} href={`/designer/requests/${r.id}`}>
-                  <Card hover>
+                  <Card hover className={ITEM}>
                     <CardBody className="flex items-center justify-between gap-4">
                       <div>
                         <p className="font-medium text-sm">{r.title}</p>
@@ -134,14 +134,14 @@ export default function DesignerHomePage() {
           </section>
 
           <section className={PANEL}>
-            <div className="flex items-center justify-between gap-4 mb-5">
+            <div className={SECTION_HEAD}>
               <h2 className="text-headline-sm">Active projects</h2>
               <Link href="/designer/projects" className="text-sm text-primary hover:underline flex items-center gap-1">View all <ArrowRight size={14} /></Link>
             </div>
             <div className="flex flex-col gap-4">
               {activeProjects.length > 0 ? activeProjects.slice(0, 4).map((p) => (
                 <Link key={p.id} href={`/designer/projects/${p.id}`}>
-                  <Card hover>
+                  <Card hover className={ITEM}>
                     <CardBody className="flex flex-col gap-3">
                       <div className="flex items-center justify-between">
                         <p className="font-medium text-sm">{p.title}</p>
@@ -160,7 +160,7 @@ export default function DesignerHomePage() {
         </div>
 
         <section className="mt-8 md:mt-10">
-          <div className="rounded-lg bg-primary-container border border-primary/10 shadow-[0_1px_3px_rgb(10_51_35/0.05)] p-8 sm:p-10 md:p-12 flex flex-col md:flex-row items-center gap-8 justify-between">
+          <div className={`rounded-lg border border-primary/15 bg-gradient-to-br from-primary-container to-[#F9ECE8] ${SHADOW} p-8 sm:p-10 md:p-12 flex flex-col md:flex-row items-center gap-8 justify-between`}>
             <div>
               <h2 className="text-headline-sm mb-2">Looking for your next commission?</h2>
               <p className="text-ink-variant text-sm max-w-md">Browse public requests customers have published to the HRUNA community and find your next project.</p>
@@ -173,19 +173,27 @@ export default function DesignerHomePage() {
   );
 }
 
-// Softly translucent ivory surfaces over the background: the faded mannequin reads through them as
-// a whisper while text stays crisp; hairline border, a whisper of shadow.
-const SURFACE = "bg-surface-bright/80 border-primary/10 shadow-[0_1px_3px_rgb(10_51_35/0.05)]";
-const PANEL = "rounded-md border p-6 md:p-7 bg-surface-bright/65 border-primary/10 shadow-[0_1px_3px_rgb(10_51_35/0.05)]";
+// Finishing for surfaces over the background: one consistent fine forest hairline and a soft two-
+// layer shadow (a crisp contact line + a wide, faint lift), softly translucent ivory so the
+// mannequin reads through as a whisper while text stays crisp. Hover lifts respect reduced motion.
+const HAIRLINE = "border-ink/[0.07]";
+const SHADOW = "shadow-[0_1px_2px_rgb(10_51_35/0.04),0_14px_32px_-20px_rgb(10_51_35/0.22)]";
+const CALM = "motion-reduce:transition-none motion-reduce:hover:translate-y-0";
+const SURFACE = `bg-surface-bright/85 ${HAIRLINE} ${SHADOW} ${CALM}`;
+const PANEL = `rounded-lg border p-6 md:p-8 bg-surface-bright/70 ${HAIRLINE} ${SHADOW}`;
+const ITEM = `bg-surface-lowest ${HAIRLINE} shadow-[0_1px_2px_rgb(10_51_35/0.04)] ${CALM}`;
+const SECTION_HEAD = "flex items-center justify-between gap-4 mb-6 pb-4 border-b border-ink/[0.06]";
 
 // The dashboard's soft mannequin-and-lilies background (styles: .designer-dashboard-backdrop in
-// globals.css) — a fixed, non-interactive layer behind the page; the content sits above it.
+// globals.css). It's an absolutely positioned layer inside this wrapper — part of the page, so it
+// scrolls with the content and never moves on its own; the wrapper fills at least the screen below
+// the navbar (svh: the small viewport, which never changes while the toolbar moves).
 function DashboardBackdrop({ children }: { children: React.ReactNode }) {
   return (
-    <>
+    <div className="relative isolate min-h-[calc(100svh-81px)]" data-testid="dashboard-canvas">
       <div aria-hidden="true" className="designer-dashboard-backdrop" data-testid="dashboard-backdrop" />
       <div className="relative z-[1]">{children}</div>
-    </>
+    </div>
   );
 }
 
@@ -198,8 +206,8 @@ function StatCard({ icon: Icon, label, value, href }: { icon: any; label: string
             <Icon size={19} />
           </div>
           <div>
-            <p className="text-2xl font-display">{value}</p>
-            <p className="text-xs text-outline">{label}</p>
+            <p className="text-3xl font-display leading-none mb-1.5">{value}</p>
+            <p className="text-xs tracking-wide text-ink-variant">{label}</p>
           </div>
         </CardBody>
       </Card>

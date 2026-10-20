@@ -78,6 +78,24 @@ export function confirmPath(params: LinkParams): string {
   return `/auth/confirm?${query(params)}`;
 }
 
+/**
+ * Safety net for the site root. When Supabase can't use an email's redirect_to (it isn't in the
+ * project's Redirect URLs allow-list) it falls back to the bare Site URL, so a verification link
+ * lands on "/?code=…" (or "/?error=…&error_code=…") and would be silently dropped by the homepage.
+ * Returns the /auth/confirm path that finishes it instead, or null when the URL carries no email-link
+ * parameters. Only whitelisted parameters are forwarded, to a fixed same-site path — never an open
+ * redirect. An untagged code is handled as a signup by /auth/confirm (resolveAuthFlow), which still
+ * rejects a recovery code ("mismatch") rather than treating it as one.
+ */
+export function strayEmailLinkPath(get: (name: string) => string | null | undefined): string | null {
+  const params = pickLinkParams(get);
+  if (params.code || params.token_hash) return confirmPath(params);
+  const clean = (v: string | null | undefined) => (typeof v === "string" ? v.replace(/[^a-z_]/gi, "").slice(0, 40) : "");
+  const errorCode = clean(get("error_code"));
+  if (errorCode) return `/auth/confirm?error=${clean(get("error")) || "access_denied"}&error_code=${errorCode}`;
+  return null;
+}
+
 /** The account-switch step for a signup link opened while another account is signed in. */
 export function switchAccountPath(params: LinkParams): string {
   return `/auth/switch-account?${query(params)}`;

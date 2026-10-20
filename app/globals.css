@@ -36,20 +36,24 @@
     @apply mx-auto w-full max-w-2xl px-6 md:px-0;
   }
 
-  /* Designer dashboard (/designer/home) background — three fixed, non-interactive layers behind the
-     page (fixed + overflow hidden, so they never scroll apart, tile visibly, or cause overflow):
-       1. the element itself: the image's soft cream/blush gingham, redrawn in CSS across the whole
-          viewport at the same check size as the displayed image (the photo's checks are ~72px in
-          its 852×1846 source), so the texture spreads edge to edge with no repeated photo tiles;
-       2. ::before — the mannequin-and-lilies image at its own aspect ratio (never stretched),
-          centred, its edges dissolved by a soft elliptical mask so its checks melt into layer 1;
-       3. ::after — an ivory veil plus faint diagonal light (echoing the sunlight in the photo) for
-          tonal variation and readability.
-     --mq-h is the image's rendered height; the check size is derived from it. */
+  /* Designer dashboard (/designer/home) background — decorative, non-interactive layers that are
+     part of the page itself (position: absolute inside the dashboard wrapper), so the illustration
+     scrolls exactly with the content like a placed editorial image. It is deliberately NOT
+     position: fixed: a fixed full-viewport layer follows the *dynamic* viewport, which changes
+     while scrolling on phones as the address bar collapses/expands — that resize moved anything
+     positioned from its centre (the mannequin, the check pattern) by half the toolbar height.
+     Every size and position here is anchored to the page top and measured in lvh (the large
+     viewport, constant while the toolbar moves) or px, so nothing re-lays-out during scrolling.
+       1. the element: the photo's soft cream/blush gingham redrawn in CSS over the whole page, at
+          the photo's own check size (~72px in its 852×1846 source) — no repeated photo tiles;
+       2. ::before — the mannequin-and-lilies photo at its own aspect ratio (never stretched),
+          centred horizontally at the top of the page, edges dissolved into layer 1 by a soft mask;
+       3. ::after — ivory veil, faint diagonal light (as in the photo) and a gentle tonal vignette.
+     --mq-h is the photo's rendered height; the check size is derived from it. */
   .designer-dashboard-backdrop {
-    --mq-h: 100lvh;
+    --mq-h: 100vh;
     --check: calc(var(--mq-h) * 72 / 1846);
-    position: fixed;
+    position: absolute;
     inset: 0;
     z-index: 0;
     overflow: hidden;
@@ -59,21 +63,31 @@
       linear-gradient(90deg, rgb(222 190 176 / 0.1) 50%, transparent 50%),
       linear-gradient(0deg, rgb(222 190 176 / 0.1) 50%, transparent 50%);
     background-size: calc(var(--check) * 2) calc(var(--check) * 2);
-    background-position: center;
+    background-position: 50% 0;
+  }
+  @supports (height: 100lvh) {
+    .designer-dashboard-backdrop {
+      --mq-h: 100lvh;
+    }
   }
   @media (min-width: 768px) {
     .designer-dashboard-backdrop {
-      --mq-h: max(112lvh, 900px);
+      --mq-h: max(112vh, 900px);
+    }
+    @supports (height: 100lvh) {
+      .designer-dashboard-backdrop {
+        --mq-h: max(112lvh, 900px);
+      }
     }
   }
   .designer-dashboard-backdrop::before {
     content: "";
     position: absolute;
-    top: 50%;
+    top: 0;
     left: 50%;
     height: var(--mq-h);
     aspect-ratio: 852 / 1846;
-    transform: translate(-50%, -50%);
+    transform: translateX(-50%);
     background: url("/images/designer/dashboard-mannequin-bg.webp") center / 100% 100% no-repeat;
     -webkit-mask-image: radial-gradient(ellipse 50% 50% at 50% 50%, #000 62%, transparent 100%);
     mask-image: radial-gradient(ellipse 50% 50% at 50% 50%, #000 62%, transparent 100%);
@@ -83,8 +97,9 @@
     position: absolute;
     inset: 0;
     background:
+      radial-gradient(ellipse 120% 90% at 50% 18%, transparent 55%, rgb(214 186 170 / 0.14) 100%),
       linear-gradient(118deg, rgb(255 251 245 / 0.42) 0%, transparent 32%, rgb(255 251 245 / 0.2) 52%, transparent 70%, rgb(255 251 245 / 0.3) 100%),
-      rgb(248 246 238 / 0.18);
+      rgb(248 246 238 / 0.16);
   }
 }
 

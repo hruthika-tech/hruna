@@ -13,6 +13,7 @@ import { requireUser, requireApprovedDesigner } from "@/lib/supabase/authorizati
 import { errorResponse } from "@/lib/supabase/errors";
 import { mapProjectUpdate, resolveProjectUpdateImages } from "@/lib/customer/data";
 import type { TablesInsert } from "@/lib/supabase/types";
+import { lockedProjectResponse } from "@/lib/projects/progress-lock-server";
 
 export const dynamic = "force-dynamic";
 
@@ -53,6 +54,10 @@ export async function POST(request: Request, { params }: { params: { id: string 
     }
 
     const supabase = createClient();
+    // Customer-approved completion locks the progress history (the database enforces it too).
+    const locked = await lockedProjectResponse(supabase, params.id);
+    if (locked) return locked;
+
     const insert: TablesInsert<"project_updates"> = {
       project_id: params.id,
       stage: stage as TablesInsert<"project_updates">["stage"],

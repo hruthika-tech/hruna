@@ -79,6 +79,12 @@ const inspect = async () => {
       zIndex: bs.zIndex,
       width: bd.getBoundingClientRect().width,
       height: bd.getBoundingClientRect().height,
+      canvasHeight: bd.parentElement.getBoundingClientRect().height,
+      contentHeight: content.getBoundingClientRect().height,
+      mqH: bs.getPropertyValue("--mq-h").trim(),
+      attachment: [bs.backgroundAttachment, before.backgroundAttachment],
+      motion: [bs.animationName, before.animationName, after.animationName, bs.transitionDuration, before.transitionDuration],
+      animations: bd.getAnimations({ subtree: true }).length,
       bgImage: before.backgroundImage,
       beforeW: parseFloat(before.width),
       beforeH: parseFloat(before.height),
@@ -113,15 +119,45 @@ for (const width of [320, 360, 390, 430, 768, 1024, 1440]) {
   const t = `@${width}px`;
   const b = m.backdrop;
   check(`${t} background image served (webp) and applied`, m.imgStatus === 200 && /webp/.test(m.imgType ?? "") && /dashboard-mannequin-bg\.webp/.test(b?.bgImage ?? ""), { status: m.imgStatus, type: m.imgType, bg: b?.bgImage });
-  check(`${t} background is a fixed, full-viewport, non-interactive layer behind the content`, b && b.position === "fixed" && b.pointerEvents === "none" && b.zIndex === "0" && m.contentZ === "1" && Math.abs(b.width - m.vw) <= 1 && Math.abs(b.height - m.vh) <= 1, { b, contentZ: m.contentZ });
+  check(`${t} background is part of the page (absolute, not fixed), covers the whole dashboard, non-interactive, behind the content`, b && b.position === "absolute" && b.pointerEvents === "none" && b.zIndex === "0" && m.contentZ === "1" && Math.abs(b.width - m.vw) <= 1 && Math.abs(b.height - b.canvasHeight) <= 1 && b.canvasHeight >= b.contentHeight - 1, { b, contentZ: m.contentZ });
+  check(`${t} no fixed attachment, animation, transition or scroll-linked motion on the background`, !b.attachment.includes("fixed") && b.motion.slice(0, 3).every((a) => a === "none") && b.motion.slice(3).every((d) => d === "0s") && b.animations === 0, { attachment: b.attachment, motion: b.motion, animations: b.animations });
+  check(`${t} sized from the large viewport (lvh) — constant while a phone's address bar moves`, /lvh/.test(b.mqH), b.mqH);
   const ratio = b.beforeW / b.beforeH;
-  check(`${t} mannequin image keeps its proportions (852:1846, not stretched), at least full height, centred`, Math.abs(ratio - 852 / 1846) < 0.005 && b.beforeH >= m.vh - 1 && b.beforeLeft === `${m.vw / 2}px` && b.beforeTop === `${m.vh / 2}px`, { ratio, w: b.beforeW, h: b.beforeH, left: b.beforeLeft, top: b.beforeTop, vw: m.vw });
+  check(`${t} mannequin keeps its proportions (852:1846, not stretched), anchored at the top of the page, centred`, Math.abs(ratio - 852 / 1846) < 0.005 && b.beforeH >= m.vh - 1 && b.beforeLeft === `${m.vw / 2}px` && b.beforeTop === "0px", { ratio, w: b.beforeW, h: b.beforeH, left: b.beforeLeft, top: b.beforeTop, vw: m.vw });
+
+  if (width < 768) {
+    // The background must move exactly with the content (no drift), and must not move when the
+    // viewport height changes the way it does when a phone's address bar collapses/expands.
+    const pos = () =>
+      page.evaluate(() => {
+        const bd = document.querySelector('[data-testid="dashboard-backdrop"]');
+        const h1 = document.querySelector("main h1");
+        return { bd: bd.getBoundingClientRect().top + window.scrollY, h1: h1.getBoundingClientRect().top + window.scrollY, bdScreen: bd.getBoundingClientRect().top, h1Screen: h1.getBoundingClientRect().top, beforeTop: getComputedStyle(bd, "::before").top, beforeH: getComputedStyle(bd, "::before").height };
+      });
+    const p0 = await pos();
+    const offsets = [];
+    for (const y of [150, 420, 800, 1300]) {
+      await page.evaluate((yy) => window.scrollTo(0, yy), y);
+      await page.waitForTimeout(120);
+      const p = await pos();
+      offsets.push(Math.round((p.bdScreen - p.h1Screen) * 100) / 100);
+    }
+    check(`${t} while scrolling, the background moves exactly with the content (constant offset to the heading)`, offsets.every((o) => Math.abs(o - (p0.bdScreen - p0.h1Screen)) < 0.5), { start: p0.bdScreen - p0.h1Screen, offsets });
+    await page.evaluate(() => window.scrollTo(0, 400));
+    const before = await pos();
+    await page.setViewportSize({ width, height: 800 + 56 }); // address bar collapses: ~56px taller viewport
+    await page.waitForTimeout(250);
+    const after = await pos();
+    check(`${t} viewport height change (address bar collapse) doesn't move the mannequin within the page`, Math.abs(after.bd - before.bd) < 0.5 && Math.abs(after.h1 - before.h1) < 0.5 && after.beforeTop === "0px", { before, after });
+    await page.setViewportSize({ width, height: 800 });
+    await page.evaluate(() => window.scrollTo(0, 0));
+  }
   const tile = ((b.beforeH * 72) / 1846) * 2;
   const [cw, ch] = (b.checkerSize ?? "").split(" ").map(parseFloat);
   check(`${t} checkerboard texture spans the full page, at the image's own check size`, (b.checker.match(/linear-gradient/g) ?? []).length === 2 && Math.abs(cw - tile) < 0.6 && Math.abs(ch - tile) < 0.6, { checker: b.checker.slice(0, 120), size: b.checkerSize, expected: tile });
   check(`${t} mannequin edges dissolve into the texture (soft radial mask, no hard boundary)`, /radial-gradient/.test(b.mask ?? ""), b.mask);
-  check(`${t} ivory veil + soft diagonal light over the image for readability`, /linear-gradient\(118deg/.test(b.veil) && /rgba\(248, 246, 238, 0\.18\)/.test(b.veil), b.veil);
-  check(`${t} stat cards and section panels sit on ivory surfaces (not directly on the pattern)`, m.statBgs.length === 3 && m.statBgs.every((c) => /rgba\(251, 250, 245, 0\.8\)/.test(c)) && m.panels.length === 2 && m.panels.every((c) => /rgba\(251, 250, 245, 0\.65\)/.test(c)), { statBgs: m.statBgs, panels: m.panels });
+  check(`${t} ivory veil, soft diagonal light and a gentle tonal vignette over the image`, /radial-gradient/.test(b.veil) && /linear-gradient\(118deg/.test(b.veil) && /rgba\(248, 246, 238, 0\.16\)/.test(b.veil), b.veil);
+  check(`${t} stat cards and section panels sit on ivory surfaces (not directly on the pattern)`, m.statBgs.length === 3 && m.statBgs.every((c) => /rgba\(251, 250, 245, 0\.85\)/.test(c)) && m.panels.length === 2 && m.panels.every((c) => /rgba\(251, 250, 245, 0\.7\)/.test(c)), { statBgs: m.statBgs, panels: m.panels });
   check(`${t} no horizontal page scroll`, m.pageScrollWidth <= m.vw + 1, { sw: m.pageScrollWidth, vw: m.vw });
   check(`${t} all existing content present`, ["WELCOME BACK", "Your studio at a glance", "Requests Received", "Active Projects", "Completed Projects", "Requests received", "Active projects", "Looking for your next commission?"].every((s) => m.text.includes(s)), m.text.slice(0, 300));
   check(`${t} Manage Studio button removed from the dashboard; Discover Requests ×2 and View all ×2 kept`, !m.links.some((l) => /Manage Studio/.test(l.text) || l.href === "/designer/studio/manage") && m.links.filter((l) => l.href === "/designer/discover-requests").length === 2 && m.links.filter((l) => /^View all/.test(l.text)).length === 2, m.links);

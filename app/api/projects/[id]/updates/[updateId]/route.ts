@@ -13,6 +13,7 @@ import { requireApprovedDesigner } from "@/lib/supabase/authorization";
 import { errorResponse } from "@/lib/supabase/errors";
 import { mapProjectUpdate, resolveProjectUpdateImages } from "@/lib/customer/data";
 import type { TablesUpdate } from "@/lib/supabase/types";
+import { lockedProjectResponse } from "@/lib/projects/progress-lock-server";
 
 export const dynamic = "force-dynamic";
 
@@ -26,6 +27,10 @@ export async function PATCH(request: Request, { params }: { params: { id: string
     if (typeof body?.note === "string") patch.note = body.note.trim();
 
     const supabase = createClient();
+    // Customer-approved completion locks the progress history (the database enforces it too).
+    const locked = await lockedProjectResponse(supabase, params.id);
+    if (locked) return locked;
+
     const { data: updated, error } = await supabase
       .from("project_updates")
       .update(patch)
@@ -60,6 +65,8 @@ export async function DELETE(_request: Request, { params }: { params: { id: stri
   try {
     const ctx = await requireApprovedDesigner();
     const supabase = createClient();
+    const locked = await lockedProjectResponse(supabase, params.id);
+    if (locked) return locked;
 
     const { error, count } = await supabase
       .from("project_updates")

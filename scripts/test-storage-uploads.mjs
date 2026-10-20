@@ -17,9 +17,11 @@
 import { execSync } from "node:child_process";
 import { APP_URL, signInWithPassword, registerAndConfirm, registerDirect } from "./lib/test-auth.mjs";
 
-/** Read-only check against the LOCAL Supabase DB container (same helper as the Phase 10 suite). */
+/** Check against the LOCAL Supabase DB container (same helper as the Phase 10 suite); set
+ *  HRUNA_TEST_DB_CONTAINER to point it at a different local stack's DB container. */
+const DB_CONTAINER = process.env.HRUNA_TEST_DB_CONTAINER ?? "supabase_db_lilirve-app";
 function sql(query) {
-  return execSync(`docker exec -i supabase_db_lilirve-app psql -U postgres -d postgres -t -A -c "${query.replace(/"/g, '\\"')}"`, {
+  return execSync(`docker exec -i ${DB_CONTAINER} psql -U postgres -d postgres -t -A -c "${query.replace(/"/g, '\\"')}"`, {
     encoding: "utf8",
   }).trim();
 }
@@ -126,17 +128,22 @@ async function main() {
 
   console.log("\n=== 5/6. Project-update images: both participants can see them, a third party cannot ===");
   {
-    // Uses the seeded completed project (91000000...0001) between aanya (customer) and meera (designer).
-    const create = await api(meera, `/api/projects/91000000-0000-0000-0000-000000000001/updates`, {
+    // An ACTIVE project between aanya (customer) and meera (designer). (The seeded project
+    // 91000000…0001 is customer-approved/completed, so its progress history is locked — see
+    // migration 20261021000001 — and can no longer take new updates.)
+    const PROJECT = "95000000-0000-0000-0000-000000000001";
+    // one line: on Windows execSync runs through cmd.exe, where a newline ends the command
+    sql(`insert into public.fashion_requests (id, customer_id, title, category, description, status) values ('75000000-0000-0000-0000-000000000001', 'c1000000-0000-0000-0000-000000000001', 'Storage test project', 'Occasion Wear', 'storage suite', 'accepted') on conflict do nothing; insert into public.proposals (id, request_id, designer_id, price, estimated_days, description, status) values ('85000000-0000-0000-0000-000000000001', '75000000-0000-0000-0000-000000000001', 'd1000000-0000-0000-0000-000000000001', 30000, 20, 'storage suite', 'accepted') on conflict do nothing; insert into public.projects (id, request_id, proposal_id, customer_id, designer_id, status) values ('${PROJECT}', '75000000-0000-0000-0000-000000000001', '85000000-0000-0000-0000-000000000001', 'c1000000-0000-0000-0000-000000000001', 'd1000000-0000-0000-0000-000000000001', 'active') on conflict do nothing;`);
+    const create = await api(meera, `/api/projects/${PROJECT}/updates`, {
       method: "POST",
       body: JSON.stringify({ stage: "Fitting", note: "Storage test update." }),
     });
     check("   (setup) Designer can create a project update", create.status === 200, create.data);
 
-    const customerView = await api(aanya, "/api/projects/91000000-0000-0000-0000-000000000001/updates");
+    const customerView = await api(aanya, `/api/projects/${PROJECT}/updates`);
     check("5. Customer (the other participant) can read the designer's update", (customerView.data.updates ?? []).some((u) => u.id === create.data.update?.id), customerView.data);
 
-    const thirdPartyView = await api(ramesh, "/api/projects/91000000-0000-0000-0000-000000000001/updates");
+    const thirdPartyView = await api(ramesh, `/api/projects/${PROJECT}/updates`);
     check("6. An unrelated designer cannot read this project's updates at all", (thirdPartyView.data.updates ?? []).length === 0, thirdPartyView.data);
   }
 

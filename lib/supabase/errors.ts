@@ -10,6 +10,8 @@
 
 import { NextResponse } from "next/server";
 import type { AuthError, PostgrestError, StorageApiError } from "@supabase/supabase-js";
+import { isProjectLockedDbError } from "@/lib/projects/progress-lock";
+import { projectLockedResponse } from "@/lib/projects/progress-lock-server";
 
 export class AppError extends Error {
   constructor(
@@ -107,6 +109,9 @@ export function errorResponse(error: unknown, context: string): NextResponse {
       { status: error.status }
     );
   }
+  // A write that reached a project whose completion the customer has approved — the database's
+  // progress-history lock rejected it. Expected, not a failure: a clear 409 with a code.
+  if (isProjectLockedDbError(error)) return projectLockedResponse();
   const appError = toAppError(error, context);
   // A real 429 from Supabase Auth (e.g. its email-send rate limit) is worth preserving as-is —
   // the client can tell "back off and retry" apart from a hard failure. Every other Auth/Postgrest/

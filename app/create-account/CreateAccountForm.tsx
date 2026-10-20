@@ -19,8 +19,22 @@ type SignupIssue = "email_exists" | "confirmation_pending" | null;
 // Supabase emails them (app/auth/confirm/route.ts).
 // `notice` is a server-supplied message, e.g. why an email-confirmation link failed
 // (app/create-account/page.tsx reads ?error= and maps it via lib/auth/confirm-errors.ts).
-export function CreateAccountForm({ notice, adminEmail = null }: { notice?: string | null; adminEmail?: string | null }) {
+// `signedIn`: this browser is already signed in as a customer/designer. The form is still shown — a
+// separate account with a DIFFERENT email can be registered without touching the current one.
+export type SignedInAccount = { email: string; role: string | null; home: string };
+
+export function CreateAccountForm({
+  notice,
+  adminEmail = null,
+  signedIn = null,
+}: {
+  notice?: string | null;
+  adminEmail?: string | null;
+  signedIn?: SignedInAccount | null;
+}) {
   const router = useRouter();
+  const [signingOut, setSigningOut] = useState(false);
+  const [signOutError, setSignOutError] = useState("");
   const [form, setForm] = useState({ name: "", email: "", password: "", confirmPassword: "" });
   const [agreed, setAgreed] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -40,9 +54,10 @@ export function CreateAccountForm({ notice, adminEmail = null }: { notice?: stri
 
   // This page ALWAYS shows the registration form — it never checks the session on load and never
   // navigates by itself (that used to send a signed-in admin straight to /admin). Nothing is sent
-  // until the user submits. Registering works even if this browser is already signed in (e.g. an
-  // admin registering someone else): the signup API uses an isolated client that cannot replace
-  // or change the current session (app/api/auth/signup/route.ts), so that session stays as it is.
+  // until the user submits. Registering works even if this browser is already signed in (an admin
+  // registering someone else, or a customer/designer creating a second account with a different
+  // email): the signup API uses an isolated client that cannot replace or change the current session
+  // (app/api/auth/signup/route.ts), so that session stays as it is.
   const update = (key: string, value: string) => setForm((f) => ({ ...f, [key]: value }));
 
   const onSubmit = async (e: React.FormEvent) => {
@@ -51,6 +66,8 @@ export function CreateAccountForm({ notice, adminEmail = null }: { notice?: stri
     if (!form.name) next.name = "Enter your full name.";
     if (!form.email) next.email = "Enter your email address.";
     else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email)) next.email = "Enter a valid email address.";
+    else if (signedIn && form.email.trim().toLowerCase() === signedIn.email.toLowerCase())
+      next.email = "That's the account you're signed in with. Use a different email address for the new account.";
     const passwordError = validatePassword(form.password);
     if (passwordError) {
       next.password = passwordError;
@@ -86,6 +103,25 @@ export function CreateAccountForm({ notice, adminEmail = null }: { notice?: stri
     }
   };
 
+  // Optional: start fresh instead (signs this browser out of the current account only — its other
+  // devices stay signed in, and nothing in the account changes).
+  const signOutInstead = async () => {
+    setSigningOut(true);
+    setSignOutError("");
+    const res = await fetch("/api/auth/logout", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ scope: "local" }),
+    }).catch(() => null);
+    if (!res?.ok) {
+      setSigningOut(false);
+      setSignOutError("We couldn't sign you out. Please try again.");
+      return;
+    }
+    // Full navigation, so nothing from the previous account's page state survives.
+    window.location.assign("/create-account");
+  };
+
   return (
     <AuthShell
       quote="“HRUNA gave my wedding lehenga a designer who understood exactly what I meant, sketch by sketch.”"
@@ -97,6 +133,26 @@ export function CreateAccountForm({ notice, adminEmail = null }: { notice?: stri
           You&apos;re signed in as the admin ({adminEmail}). You can register someone else here; they confirm the account from their own
           email, and you stay signed in as the admin.
         </p>
+      )}
+      {signedIn && (
+        <div role="status" data-testid="signed-in-registering" className="text-sm text-ink-variant bg-primary-container/40 rounded-md px-4 py-3 mb-6 flex flex-col gap-2">
+          <p>
+            You&apos;re signed in as <span className="text-ink font-medium" data-testid="signed-in-email">{signedIn.email}</span>
+            {signedIn.role ? ` (${signedIn.role})` : ""}. You can create a separate HRUNA account with a <span className="text-ink font-medium">different email</span> below —
+            your current account stays signed in here and nothing in it changes.
+          </p>
+          <p>
+            The new account is confirmed from its own email. Open that link on another device to sign the new account in there; open it in
+            this browser and we&apos;ll ask before switching accounts.
+          </p>
+          <div className="flex flex-wrap gap-x-4 gap-y-1">
+            <Link href={signedIn.home} className="text-primary font-medium hover:underline">Back to my account</Link>
+            <button type="button" onClick={signOutInstead} disabled={signingOut} className="text-primary font-medium hover:underline disabled:opacity-60" data-testid="signout-create">
+              {signingOut ? "Signing out…" : "Sign out instead"}
+            </button>
+          </div>
+          {signOutError && <p className="text-error">{signOutError}</p>}
+        </div>
       )}
       {linkNotice && (
         <p role="alert" className="text-sm text-error bg-error-container/40 rounded-md px-4 py-3 mb-6">

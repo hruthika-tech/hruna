@@ -201,16 +201,23 @@ insert into public.projects (
 ) values (
   '91000000-0000-0000-0000-000000000001', '72000000-0000-0000-0000-000000000001',
   '82000000-0000-0000-0000-000000000001', 'c1000000-0000-0000-0000-000000000001',
-  'd1000000-0000-0000-0000-000000000001', 'Completed', 100, 'completed',
-  now() - interval '60 days', now() - interval '118 days'
+  'd1000000-0000-0000-0000-000000000001', 'Completed', 100, 'awaiting_confirmation',
+  null, now() - interval '118 days'
 );
 
+-- Progress history is written before the customer's confirmation below: once a project is
+-- 'completed' its history is locked (migration 20261021000001), exactly as in the real workflow.
 insert into public.project_updates (project_id, stage, note, author_id, created_at)
 values
   ('91000000-0000-0000-0000-000000000001', 'Request Accepted', 'Proposal accepted — project started.',
    'd1000000-0000-0000-0000-000000000001', now() - interval '118 days'),
   ('91000000-0000-0000-0000-000000000001', 'Completed', 'Final fitting complete, delivered.',
    'd1000000-0000-0000-0000-000000000001', now() - interval '60 days');
+
+-- The customer confirms completion (same end state as before: completed 60 days ago).
+update public.projects
+set status = 'completed', completed_at = now() - interval '60 days'
+where id = '91000000-0000-0000-0000-000000000001';
 
 -- ---------------------------------------------------------------------------
 -- Review for the completed project (recomputes designer_profiles.rating/review_count via trigger)

@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import Image from "next/image";
 import { useParams, useRouter } from "next/navigation";
-import { Mail, Phone, MapPin, MessageCircle, CheckCircle2, Hourglass, AlertCircle, Loader2, Star } from "lucide-react";
+import { Mail, Phone, MapPin, MessageCircle, CheckCircle2, Hourglass, AlertCircle, Loader2, Star, Lock } from "lucide-react";
 import { Avatar, Badge } from "@/components/ui/Badge";
 import { SaveToggleButton } from "@/components/ui/SaveToggleButton";
 import { Timeline, ProgressBar } from "@/components/ui/Progress";
@@ -15,6 +15,7 @@ import { RatingInput } from "@/components/ui/Rating";
 import { useToast } from "@/hooks/use-toast";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import type { DesignerSummary } from "@/lib/customer/data";
+import { isProgressLocked } from "@/lib/projects/progress-lock";
 
 interface ProjectDetail {
   id: string;
@@ -337,7 +338,13 @@ export default function ProjectWorkspacePage() {
               <p className="text-label-md text-outline">PROGRESS</p>
               <span className="text-sm text-ink-variant">{project.progressPercent}% complete</span>
             </div>
-            <ProgressBar percent={project.progressPercent} className="mb-8" />
+            <ProgressBar percent={project.progressPercent} className={isProgressLocked(project.status) ? "mb-4" : "mb-8"} />
+            {isProgressLocked(project.status) && (
+              <p data-testid="progress-locked-note" className="flex items-start gap-2 text-xs text-ink-variant bg-surface-low rounded-md px-3 py-2.5 mb-6">
+                <Lock size={13} className="shrink-0 mt-0.5" aria-hidden="true" />
+                You approved this project's completion, so its progress history is final and can no longer be changed.
+              </p>
+            )}
             <div className="flex flex-col gap-6">
               {[...updates].reverse().map((u) => (
                 <div key={u.id} className="flex gap-4 border-b border-outline-variant pb-6 last:border-none">

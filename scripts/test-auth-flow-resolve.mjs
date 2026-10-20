@@ -3,7 +3,7 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { authCallbackUrl, confirmPath, pickLinkParams, resolveAuthFlow, switchAccountPath } from "../lib/auth/auth-flows.ts";
+import { authCallbackUrl, confirmPath, pickLinkParams, resolveAuthFlow, strayEmailLinkPath, switchAccountPath } from "../lib/auth/auth-flows.ts";
 
 const r = (flow, type, hasMessage = false) => resolveAuthFlow({ flow, type, hasMessage });
 
@@ -65,4 +65,22 @@ test("the account-switch step carries only whitelisted link parameters (no open 
   assert.equal(confirmPath({ code: "a&flow=recovery" }), "/auth/confirm?code=a%26flow%3Drecovery");
   // Empty and oversized values are dropped.
   assert.deepEqual(pickLinkParams((n) => (n === "code" ? "" : n === "token_hash" ? "x".repeat(600) : null)), {});
+});
+
+test("a verification link that fell back to the site root is forwarded to /auth/confirm, safely", () => {
+  const at = (q) => strayEmailLinkPath((n) => new URLSearchParams(q).get(n));
+  // Supabase's fallback: Site URL + ?code= (redirect_to not allow-listed)
+  assert.equal(at("code=abc123"), "/auth/confirm?code=abc123");
+  // token_hash links keep their type; flow markers are kept
+  assert.equal(at("token_hash=th&type=signup"), "/auth/confirm?token_hash=th&type=signup");
+  assert.equal(at("code=c&flow=signup"), "/auth/confirm?code=c&flow=signup");
+  // Supabase-reported errors are forwarded, sanitised
+  assert.equal(at("error=access_denied&error_code=otp_expired&error_description=Email+link+is+invalid"), "/auth/confirm?error=access_denied&error_code=otp_expired");
+  assert.equal(at("error_code=otp_expired%22%3E%3Cscript%3E"), "/auth/confirm?error=access_denied&error_code=otp_expiredscript");
+  // never an open redirect: other parameters are dropped, the target is always the fixed same-site path
+  assert.equal(at("code=c&next=https://evil.example&redirect_to=//evil.example"), "/auth/confirm?code=c");
+  assert.equal(at("code=a%26next%3Dhttps://evil.example"), "/auth/confirm?code=a%26next%3Dhttps%3A%2F%2Fevil.example");
+  // an ordinary homepage visit is left alone
+  assert.equal(at(""), null);
+  assert.equal(at("utm_source=instagram"), null);
 });

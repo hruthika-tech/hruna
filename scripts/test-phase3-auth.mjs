@@ -324,19 +324,19 @@ async function main() {
     check("12d. ...signed in as the NEW account, without admin privileges", s.email === email && s.isAdmin === false, s);
 
     const reused = await go(`?token_hash=${encodeURIComponent(tokenHash)}&type=signup`);
-    check("12e. Re-using the same link -> /create-account?error=expired", reused.location.includes("/create-account?error=expired"), reused);
-    check("     ...and /create-account explains it", await pageShows(reused.location, "expired or has already been used"));
+    check("12e. Re-using the same link -> /verify-email?error=expired", reused.location.includes("/verify-email?error=expired"), reused);
+    check("     ...and /verify-email explains it and offers a new link", await pageShows(reused.location, "expired or was already used"));
     const bogus = await go("?token_hash=not-a-real-token-hash&type=signup");
-    check("12f. An invalid token_hash -> /create-account with an error", /\/create-account\?error=(expired|invalid-link)$/.test(bogus.location), bogus);
-    check("     ...and /create-account shows how to get a new link", await pageShows(bogus.location, "fill in the form again"));
+    check("12f. An invalid token_hash -> /verify-email with an error", /\/verify-email\?error=(expired|invalid-link)$/.test(bogus.location), bogus.location);
+    check("     ...and /verify-email shows how to get a new link", await pageShows(bogus.location, "Send a new verification email"));
     const missing = await go("");
-    check("12g. Missing parameters -> /create-account?error=invalid-link", missing.location.includes("/create-account?error=invalid-link"), missing);
+    check("12g. Missing parameters -> /verify-email?error=invalid-link", missing.location.includes("/verify-email?error=invalid-link"), missing);
     check("     ...and /create-account explains it", await pageShows(missing.location, "isn&#x27;t valid") || await pageShows(missing.location, "isn't valid"));
     const supaErr = await go("?error=access_denied&error_code=otp_expired");
-    check("12h. A Supabase-reported error in the link -> /create-account?error=expired", supaErr.location.includes("/create-account?error=expired"), supaErr);
+    check("12h. A Supabase-reported error in the link -> /verify-email?error=expired", supaErr.location.includes("/verify-email?error=expired"), supaErr);
     const pkce = await go("?code=0f1d2c3b-aaaa-bbbb-cccc-000000000000");
-    check("12i. A ?code= (PKCE) link opened without its verifier -> /create-account?error=different-browser", pkce.location.includes("/create-account?error=different-browser"), pkce);
-    check("     ...and /create-account says to open it in the original browser", await pageShows(pkce.location, "same browser where the account was created"));
+    check("12i. A ?code= (PKCE) link opened without its verifier -> /login?verified=signup", pkce.location.includes("/login?verified=signup"), pkce);
+    check("     ...and sign-in continues to role selection (next=/choose-role), no original browser needed", decodeURIComponent(pkce.location).includes("next=/choose-role"), pkce.location);
     const plain = await fetch(`${APP_URL}/create-account?error=toString`);
     check("12j. An unknown ?error= value shows no message (form only)", plain.status === 200 && !(await plain.text()).includes('role="alert"'));
     check("12k. The admin session is untouched throughout", (await session(personas["admin@lilirve.dev"])).isAdmin === true);

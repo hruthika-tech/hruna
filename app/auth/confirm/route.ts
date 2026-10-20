@@ -143,7 +143,15 @@ async function handleLink(request: NextRequest, get: (name: string) => string | 
   const linkError = (reason: LinkErrorReason, flow?: AuthFlow) =>
     redirectTo(`/auth/link-error?reason=${reason}${flow ? `&flow=${flow}` : ""}`);
   // Only short, known codes are forwarded — never Supabase's free-text description.
-  const signupError = (reason: ConfirmationErrorReason) => redirectTo(`/create-account?error=${reason}`);
+  // A failed signup link: expired / already used / invalid → /verify-email, which explains it and
+  // sends a fresh link. A PKCE `?code=` opened in another browser or device isn't a failure: Supabase
+  // only issues that code after it has verified the address, but the one-time code verifier lives in
+  // the browser that signed up, so no session can be created HERE — the user signs in on this device
+  // instead and continues to role selection (or their role's home, if they already chose one).
+  const signupError = (reason: ConfirmationErrorReason) =>
+    reason === "different-browser"
+      ? redirectTo(`/login?verified=signup&next=${encodeURIComponent("/choose-role")}`)
+      : redirectTo(`/verify-email?error=${reason}`);
   const emailChangeError = (state: "expired" | "invalid" | "different-browser") => redirectTo(`/account/email?status=${state}`);
   const recoveryError = (errorCode: string) =>
     redirectTo(`/reset-password?error_code=${encodeURIComponent(errorCode.replace(/[^a-z_]/gi, "").slice(0, 40))}`);

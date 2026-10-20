@@ -23,6 +23,8 @@ function LoginForm() {
   const next = nextParam ? safeNextPath(nextParam) : null;
   const [form, setForm] = useState({ email: "", password: "" });
   const [error, setError] = useState("");
+  // Set when sign-in fails because the account's email isn't verified yet → offer a fresh link.
+  const [unverified, setUnverified] = useState(false);
   const [loading, setLoading] = useState(false);
 
   const update = (key: string, value: string) => setForm((f) => ({ ...f, [key]: value }));
@@ -34,6 +36,7 @@ function LoginForm() {
       return;
     }
     setError("");
+    setUnverified(false);
     setLoading(true);
     try {
       const res = await fetch("/api/auth/login", {
@@ -42,7 +45,10 @@ function LoginForm() {
         body: JSON.stringify(form),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.message ?? "Something went wrong. Please try again.");
+      if (!res.ok) {
+        setUnverified(data.code === "email_not_confirmed");
+        throw new Error(data.message ?? "Something went wrong. Please try again.");
+      }
       router.push(data.redirectTo ?? next ?? safeNextPath(data.home));
     } catch (err) {
       setError(err instanceof Error ? err.message : "Something went wrong. Please try again.");
@@ -54,6 +60,13 @@ function LoginForm() {
     <>
       <p className="text-label-md text-outline mb-2">WELCOME BACK</p>
       <h1 className="text-headline-md mb-8">Sign in to HRUNA</h1>
+      {/* Set by app/auth/confirm/route.ts when a verification link was opened on another device or browser:
+          Supabase has verified the address, but the session can only be created by signing in here. */}
+      {searchParams.get("verified") === "signup" && (
+        <p className="text-sm text-ink bg-primary-container/40 rounded-md px-4 py-3 -mt-4 mb-6" role="status" data-testid="verified-notice">
+          Your email address is verified. Sign in to finish setting up your account.
+        </p>
+      )}
       {/* Set by app/reset-password/ResetPasswordFlow.tsx after a successful password reset. */}
       {searchParams.get("reset") === "success" && (
         <p className="text-sm text-primary -mt-4 mb-6" role="status">
@@ -79,6 +92,15 @@ function LoginForm() {
             autoComplete="current-password"
           />
         </Field>
+        {unverified && (
+          <Link
+            href={`/verify-email?error=unverified&email=${encodeURIComponent(form.email.trim())}`}
+            className="text-sm text-primary font-medium hover:underline -mt-2"
+            data-testid="resend-verification"
+          >
+            Send a new verification email
+          </Link>
+        )}
         <Link href="/forgot-password" className="text-sm text-primary hover:underline -mt-2 self-end">
           Forgot password?
         </Link>

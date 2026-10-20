@@ -10,7 +10,7 @@ const SESSION_COOKIE = /^sb-.+-auth-token(\.\d+)?$/;
 /**
  * Signs the current account out. Default scope "global" (every device — the existing Sign out button);
  * `{ "scope": "local" }` signs out only THIS browser, which is what switching to another account uses
- * (app/create-account/AccountSwitchPanel.tsx, app/auth/link-error). Whatever Supabase answers — e.g. the
+ * (app/create-account/CreateAccountForm.tsx "Sign out instead", app/auth/link-error). Whatever Supabase answers — e.g. the
  * session had already expired — this browser's session cookies are always cleared, so it really ends up
  * signed out instead of keeping a half-valid session.
  */

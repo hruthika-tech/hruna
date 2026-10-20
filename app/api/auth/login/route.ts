@@ -31,7 +31,7 @@ export async function POST(request: Request) {
     if (error) {
       if (error.code === "email_not_confirmed") {
         return NextResponse.json(
-          { status: "error", message: "Please verify your email before signing in." },
+          { status: "error", code: "email_not_confirmed", message: "Please verify your email before signing in." },
           { status: 400 }
         );
       }

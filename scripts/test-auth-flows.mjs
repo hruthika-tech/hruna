@@ -72,6 +72,14 @@ function dbCount(sql) {
   });
   return Number((r.stdout ?? "").trim().split("\n").filter(Boolean).pop());
 }
+/** A single text value from a read-only query (e.g. a row fingerprint). */
+function dbValue(sql) {
+  const r = spawnSync("docker", ["exec", "-i", DB_CONTAINER, "psql", "-U", "postgres", "-d", "postgres", "-X", "-q", "-tA"], {
+    input: `BEGIN READ ONLY; ${sql}; ROLLBACK;`,
+    encoding: "utf8",
+  });
+  return (r.stdout ?? "").trim().split("\n").filter(Boolean).pop() ?? "";
+}
 const authUsersWithEmail = (email) => dbCount(`SELECT count(*) FROM auth.users WHERE lower(email) = lower('${email.replace(/'/g, "''")}')`);
 
 // ---------- Mailpit ----------
@@ -160,7 +168,7 @@ async function main() {
     const relogin = await login(email, FRESH_PASSWORD);
     check("1m. Login afterwards routes by the real role (customer → /home)", relogin.status === 200 && relogin.data.home === "/home", relogin.data);
     const reused = await visit(href);
-    check("1n. Re-using the confirmation link → /create-account?error=expired (signup-specific message)", reused.location.includes("/create-account?error=expired"), reused.location);
+    check("1n. Re-using the confirmation link → /verify-email?error=expired (signup-specific message)", reused.location.includes("/verify-email?error=expired"), reused.location);
     check("     …and still no second account", authUsersWithEmail(email) === 1);
     void tokenHash;
   }
@@ -195,9 +203,106 @@ async function main() {
     const { tokenHash: th3 } = await mailFor(email3, SUBJECT.signup, since3);
     const v3 = await visit(defaultTemplateLink(th3, "signup", `${APP_URL}/auth/confirm?flow=signup`));
     const c3 = await visit(v3.location); // a different browser: no verifier cookie
-    check("1Df. Default-template link in ANOTHER browser → /create-account?error=different-browser", c3.location.includes("/create-account?error=different-browser"), c3.location);
+    check("1Df. Default-template link in ANOTHER browser → /login?verified=signup", c3.location.includes("/login?verified=signup"), c3.location);
     const after3 = await login(email3, FRESH_PASSWORD);
     check("1Dg. …and, as the message says, the address is already confirmed: signing in works", after3.status === 200 && after3.data.home === "/choose-role", after3.data);
+  }
+
+  console.log("\n=== 1E. Redirect not allow-listed → Supabase falls back to the Site URL root (the homepage incident) ===");
+  {
+    const email = unique("rootfallback");
+    const since = Date.now();
+    const s = await signup(email);
+    const jar = merge("", s.res);
+    const { tokenHash } = await mailFor(email, SUBJECT.signup, since);
+    // A redirect_to Supabase won't accept (not the Site URL's host, not in the allow-list): exactly what
+    // happens when the app's /auth/confirm URL isn't allow-listed in the project's URL Configuration.
+    const v = await visit(defaultTemplateLink(tokenHash, "signup", "https://not-allow-listed.example/auth/confirm?flow=signup"));
+    const landed = new URL(v.location);
+    check("1Ea. Supabase drops the redirect and sends the user to the bare Site URL root with ?code=", landed.pathname === "/" && landed.searchParams.has("code") && !v.location.includes("not-allow-listed"), v.location.replace(/code=[^&]+/, "code=…"));
+    const home = await visit(`${APP_URL}/?${landed.searchParams.toString()}`, jar);
+    check("1Eb. The homepage forwards the stray code to /auth/confirm (instead of silently dropping it)", home.location.includes("/auth/confirm?code="), home.location.replace(/code=[^&]+/, "code=…"));
+    const c = await visit(home.location, jar);
+    check("1Ec. …which finishes the signup → /choose-role?confirmed=signup", c.location.endsWith("/choose-role?confirmed=signup"), c.location);
+    const me = await session(merge(jar, c.res));
+    check("1Ed. …signed in as the new account, no role yet", me.email === email && !me.hasCustomerProfile && !me.hasDesignerProfile, me);
+    const plain = await fetch(`${APP_URL}/?utm_source=test`, { redirect: "manual" });
+    check("1Ee. An ordinary homepage visit is unaffected (no redirect)", plain.status === 200, plain.status);
+  }
+
+  console.log("\n=== 1F. Cross-device verification (sign up on one device, open the email on another) ===");
+  {
+    // Recommended template (supabase/templates/confirmation.html): token_hash link, verified server-side.
+    const email = unique("crossdevice");
+    const since = Date.now();
+    const s = await signup(email); // device A (laptop): holds only the PKCE verifier cookie
+    const deviceA = merge("", s.res);
+    const { href } = await mailFor(email, SUBJECT.signup, since);
+    check("1Fa. The emailed link is a token_hash link to /auth/confirm (no browser-bound PKCE code)", href.includes("/auth/confirm?") && href.includes("token_hash=") && !href.includes("code="), href.replace(/token_hash=[^&]+/, "token_hash=…"));
+    const phone = await visit(href); // device B (phone): no cookies at all
+    check("1Fb. Opened on ANOTHER device → /choose-role?confirmed=signup", phone.location.endsWith("/choose-role?confirmed=signup"), phone.location);
+    const phoneJar = merge("", phone.res);
+    const me = await session(phoneJar);
+    check("1Fc. …and that device is signed in as the new account, no role yet", me.email === email && !me.hasCustomerProfile && !me.hasDesignerProfile, me);
+    const roleHtml = await (await fetch(`${APP_URL}/choose-role?confirmed=signup`, { headers: { cookie: phoneJar } })).text();
+    check("1Fd. Role selection on that device shows the verified-email message", roleHtml.includes('data-testid="signup-confirmed"'));
+    check("1Fe. Device A (where the account was created) was not needed and holds no session", sessionCookieNames(s.res).length === 0 && !(await session(deviceA)).authenticated);
+
+    const reused = await visit(href);
+    check("1Ff. Re-using the link → /verify-email?error=expired", reused.location.includes("/verify-email?error=expired"), reused.location);
+    const resendHtml = await (await fetch(`${APP_URL}/verify-email?error=expired`)).text();
+    check("1Fg. …which explains it and offers 'Send a new verification email' with an email field", /expired or was already used/.test(resendHtml) && resendHtml.includes("Send a new verification email") && resendHtml.includes('id="resendEmail"'));
+
+    // An expired / already-used link for an account that is NOT yet confirmed → a fresh link that works on any device.
+    const pendingEmail = unique("freshlink");
+    const t0 = Date.now();
+    await signup(pendingEmail);
+    const first = await mailFor(pendingEmail, SUBJECT.signup, t0);
+    await sleep(2500); // past the local resend throttle
+    const t1 = Date.now();
+    const resend = await api("/api/auth/resend", { method: "POST", body: { email: pendingEmail } });
+    check("1Fh. Requesting a new verification email → 200", resend.status === 200, resend.data);
+    const fresh = await mailFor(pendingEmail, SUBJECT.signup, t1);
+    check("1Fi. The new email carries a different token_hash link", fresh.href !== first.href && fresh.href.includes("token_hash="));
+    const freshVisit = await visit(fresh.href);
+    check("1Fj. The fresh link works on another device → /choose-role?confirmed=signup", freshVisit.location.endsWith("/choose-role?confirmed=signup"), freshVisit.location);
+
+    // Unverified account trying to sign in → a machine-readable code the login page turns into a resend link.
+    const unverifiedEmail = unique("unverified");
+    await signup(unverifiedEmail);
+    const blocked = await login(unverifiedEmail, FRESH_PASSWORD);
+    check("1Fk. Signing in before verifying → 400 code=email_not_confirmed (login page offers a new link)", blocked.status === 400 && blocked.data.code === "email_not_confirmed", blocked.data);
+
+    // Default template (PKCE ?code=) opened on another device: verified by Supabase, finish by signing in.
+    const pkceEmail = unique("pkcephone");
+    const t2 = Date.now();
+    await signup(pkceEmail);
+    const { tokenHash } = await mailFor(pkceEmail, SUBJECT.signup, t2);
+    const v = await visit(defaultTemplateLink(tokenHash, "signup", `${APP_URL}/auth/confirm?flow=signup`));
+    const onPhone = await visit(v.location); // no verifier cookie on this device
+    check("1Fl. PKCE link on another device → /login?verified=signup&next=/choose-role (not the signup form)", onPhone.location.includes("/login?verified=signup") && decodeURIComponent(onPhone.location).includes("next=/choose-role"), onPhone.location);
+    const signedIn = await login(pkceEmail, FRESH_PASSWORD);
+    check("1Fm. …the address is verified: signing in there works and continues to /choose-role", signedIn.status === 200 && signedIn.data.home === "/choose-role", signedIn.data);
+    if (browser) {
+      const { context, page: p } = await page();
+      await p.goto(`${APP_URL}${new URL(onPhone.location, APP_URL).pathname}${new URL(onPhone.location, APP_URL).search}`, { waitUntil: "networkidle" });
+      const notice = await p.locator('[data-testid="verified-notice"]').innerText().catch(() => "");
+      check("1Fn. The sign-in page says the email is verified", /email address is verified/i.test(notice), notice);
+      await p.fill("#email", pkceEmail);
+      await p.fill("#password", FRESH_PASSWORD);
+      await Promise.all([p.waitForURL((u) => u.pathname === "/choose-role", { timeout: 30000 }).catch(() => undefined), p.click('button[type="submit"]')]);
+      check("1Fo. …and signing in lands on /choose-role", new URL(p.url()).pathname === "/choose-role", p.url());
+      await p.goto(`${APP_URL}/login`, { waitUntil: "networkidle" });
+      await context.clearCookies();
+      await p.goto(`${APP_URL}/login`, { waitUntil: "networkidle" });
+      await p.fill("#email", unverifiedEmail);
+      await p.fill("#password", FRESH_PASSWORD);
+      await p.click('button[type="submit"]');
+      await p.waitForSelector('[data-testid="resend-verification"]', { timeout: 15000 }).catch(() => undefined);
+      const resendHref = await p.locator('[data-testid="resend-verification"]').getAttribute("href").catch(() => null);
+      check("1Fp. An unverified sign-in shows 'Send a new verification email' (→ /verify-email with the address)", !!resendHref && resendHref.startsWith("/verify-email?error=unverified&email="), resendHref);
+      await context.close();
+    }
   }
 
   console.log("\n=== 2. Signup retry with an existing or pending email ===");
@@ -374,13 +479,13 @@ async function main() {
   console.log("\n=== 6. Invalid, expired, reused, mismatched and cross-browser links ===");
   {
     const loc = async (q, cookie) => (await visit(`/auth/confirm${q}`, cookie)).location;
-    check("6a. Bogus signup token → /create-account with a signup error", /\/create-account\?error=(expired|invalid-link)$/.test(await loc("?flow=signup&token_hash=nope&type=signup")));
-    check("6b. No parameters → /create-account?error=invalid-link", (await loc("")).includes("/create-account?error=invalid-link"));
-    check("6c. Supabase-reported expiry on a signup link → /create-account?error=expired", (await loc("?flow=signup&error=access_denied&error_code=otp_expired")).includes("/create-account?error=expired"));
+    check("6a. Bogus signup token → /verify-email with a signup error (and a way to get a new link)", /\/verify-email\?error=(expired|invalid-link)$/.test(await loc("?flow=signup&token_hash=nope&type=signup")));
+    check("6b. No parameters → /verify-email?error=invalid-link", (await loc("")).includes("/verify-email?error=invalid-link"));
+    check("6c. Supabase-reported expiry on a signup link → /verify-email?error=expired", (await loc("?flow=signup&error=access_denied&error_code=otp_expired")).includes("/verify-email?error=expired"));
     const bogusChange = await loc("?flow=email_change&token_hash=nope&type=email_change");
     check("6d. Bogus email-change token → /account/email?status=expired|invalid (not a signup page)", /\/account\/email\?status=(expired|invalid)$/.test(bogusChange), bogusChange);
     check("6e. Email-change ?code= in another browser → /account/email?status=different-browser", (await loc("?flow=email_change&code=00000000-0000-0000-0000-000000000000")).includes("/account/email?status=different-browser"));
-    check("6f. Signup ?code= in another browser → /create-account?error=different-browser", (await loc("?flow=signup&code=00000000-0000-0000-0000-000000000000")).includes("/create-account?error=different-browser"));
+    check("6f. Signup ?code= in another browser → /login?verified=signup", (await loc("?flow=signup&code=00000000-0000-0000-0000-000000000000")).includes("/login?verified=signup"));
     check("6g. Unknown flow → /auth/link-error?reason=unknown", (await loc("?flow=admin&token_hash=x&type=signup")).includes("/auth/link-error?reason=unknown"));
     check("6h. Unsupported token type → /auth/link-error?reason=unknown", (await loc("?token_hash=x&type=magiclink")).includes("/auth/link-error?reason=unknown"));
     check("6i. Email-change marker on a signup token → /auth/link-error?reason=mismatch", (await loc("?flow=email_change&token_hash=x&type=signup")).includes("/auth/link-error?reason=mismatch"));
@@ -394,7 +499,7 @@ async function main() {
       const { context, page: p } = await page(null);
       await p.goto(`${APP_URL}/auth/confirm?flow=signup#error=access_denied&error_code=otp_expired&error_description=Email+link+is+invalid+or+has+expired`, { waitUntil: "networkidle" });
       const text = await p.locator("body").innerText();
-      check("6m. Default-template expired signup link (#fragment error) → /create-account 'expired' message", p.url().includes("/create-account") && text.includes("expired or has already been used"), `${p.url()} ${text.slice(0, 200)}`);
+      check("6m. Default-template expired signup link (#fragment error) → /verify-email 'expired' message + new-link action", p.url().includes("/verify-email") && text.includes("expired or was already used") && text.includes("Send a new verification email"), `${p.url()} ${text.slice(0, 200)}`);
       await context.close();
     }
   }
@@ -461,7 +566,7 @@ async function main() {
 
     // Up front: /create-account explains the account switch instead of silently showing the form.
     const createHtml = await (await fetch(`${APP_URL}/create-account`, { headers: { cookie: designerCookie } })).text();
-    check("8a. /create-account while signed in as the designer → account-switch step (names the designer), not the form", createHtml.includes('data-testid="account-switch"') && createHtml.includes(DESIGNER) && createHtml.includes("(designer)") && !createHtml.includes('id="name"'));
+    check("8a. /create-account while signed in as the designer → the registration form, with a note naming the signed-in designer (no forced sign-out)", createHtml.includes('data-testid="signed-in-registering"') && createHtml.includes(DESIGNER) && createHtml.includes("(designer)") && createHtml.includes('id="name"'));
     const anonCreate = await (await fetch(`${APP_URL}/create-account`)).text();
     check("8b. /create-account signed out → the normal registration form", anonCreate.includes('id="name"') && !anonCreate.includes('data-testid="account-switch"'));
 
@@ -503,7 +608,7 @@ async function main() {
     const designerAfter = await session(merge("", designerAgain.res));
     check("8m. The designer account is untouched: same id, still designer, NO customer profile, home /designer/home", designerAgain.data.home === "/designer/home" && designerAfter.userId === designerBefore.userId && designerAfter.hasDesignerProfile && !designerAfter.hasCustomerProfile && dbCount(`SELECT count(*) FROM public.customer_profiles WHERE user_id='${designerBefore.userId}'`) === 0, designerAfter);
     const replay = await post(oldDesignerCookie, { Origin: origin });
-    check("8n. Replaying the switch POST (link already used) → signup 'expired' message, no session written", (replay.headers.get("location") ?? "").includes("/create-account?error=expired") && sessionCookieNames(replay).length === 0, replay.headers.get("location"));
+    check("8n. Replaying the switch POST (link already used) → signup 'expired' message, no session written", (replay.headers.get("location") ?? "").includes("/verify-email?error=expired") && sessionCookieNames(replay).length === 0, replay.headers.get("location"));
 
     // Hosted's default-template shape: the link comes back as ?code=, exchangeable only with the verifier
     // cookie in this browser — the switch must keep it working.
@@ -553,12 +658,12 @@ async function main() {
       // The whole thing in a real browser, through the UI.
       const { context, page: p } = await page(merge("", (await login(DESIGNER, seedPassword())).res));
       await p.goto(`${APP_URL}/create-account`, { waitUntil: "networkidle" });
-      const panel = (await p.locator('[data-testid="account-switch"]').count()) === 1;
+      const notice = (await p.locator('[data-testid="signed-in-registering"]').count()) === 1 && (await p.locator("#name").count()) === 1;
       await p.click('[data-testid="signout-create"]');
-      await p.waitForSelector("#name", { timeout: 20000 }).catch(() => undefined);
+      await p.waitForSelector('[data-testid="signed-in-registering"]', { state: "detached", timeout: 20000 }).catch(() => undefined);
       await p.waitForLoadState("networkidle"); // let the fresh page hydrate before typing into it
-      const formShown = (await p.locator("#name").count()) === 1;
-      check("8u. Browser: designer opens Create account → switch step → 'Sign out and create a new account' → empty form", panel && formShown);
+      const formShown = (await p.locator("#name").count()) === 1 && (await p.locator('[data-testid="signed-in-registering"]').count()) === 0;
+      check("8u. Browser: designer opens Create account → form + signed-in note → optional 'Sign out instead' → plain empty form", notice && formShown);
       const C5 = unique("ui-customer");
       const since5 = Date.now();
       await p.fill("#name", "UI Customer");
@@ -592,6 +697,73 @@ async function main() {
       check("8x. Browser: designer opens the link → switch step → 'Sign out and continue' → signed in as the new customer", onSwitch && p2.url().includes("/choose-role?confirmed=signup") && banner.includes(C6) && who === C6, { url: p2.url(), who });
       await c2.close();
     }
+  }
+
+  console.log("\n=== 8B. Creating a separate account (different email) while signed in — no sign-out needed ===");
+  if (browser) {
+    const DESIGNER = "meera@lilirve.dev";
+    const designerJar = merge("", (await login(DESIGNER, seedPassword())).res);
+    const designerId = (await session(designerJar)).userId;
+    // Everything that identifies and belongs to the existing account, fingerprinted before/after.
+    const fingerprint = () =>
+      dbValue(`SELECT md5(concat_ws('|',
+        (SELECT email || ':' || coalesce(email_confirmed_at::text, '') FROM auth.users WHERE id = '${designerId}'),
+        (SELECT row_to_json(u)::text FROM public.users u WHERE id = '${designerId}'),
+        (SELECT row_to_json(d)::text FROM public.designer_profiles d WHERE user_id = '${designerId}'),
+        (SELECT count(*)::text FROM public.customer_profiles WHERE user_id = '${designerId}'),
+        (SELECT coalesce(string_agg(p.id::text || p.status::text || p.stage::text, ',' ORDER BY p.id), '') FROM public.projects p JOIN public.designer_profiles d ON d.id = p.designer_id WHERE d.user_id = '${designerId}'),
+        (SELECT count(*)::text FROM public.collections c JOIN public.designer_profiles d ON d.id = c.designer_id WHERE d.user_id = '${designerId}')))`);
+    const before = fingerprint();
+
+    const { context, page: p } = await page(designerJar);
+    await p.goto(`${APP_URL}/create-account`, { waitUntil: "networkidle" });
+    const note = await p.locator('[data-testid="signed-in-registering"]').innerText().catch(() => "");
+    const back = await p.locator('[data-testid="signed-in-registering"] a', { hasText: "Back to my account" }).getAttribute("href").catch(() => null);
+    check("8Ba. Signed-in designer sees the registration form + a note: current account stays signed in, use a different email", (await p.locator("#name").count()) === 1 && note.includes(DESIGNER) && /different email/i.test(note) && /stays signed in/i.test(note) && back === "/designer/home", { note, back });
+
+    // Same email as the signed-in account → refused before anything is sent.
+    const posts = [];
+    p.on("request", (r) => r.url().includes("/api/auth/signup") && posts.push(r.method()));
+    await p.fill("#name", "Second Account");
+    await p.fill("#email", DESIGNER.toUpperCase());
+    await p.fill("#password", FRESH_PASSWORD);
+    await p.fill("#confirmPassword", FRESH_PASSWORD);
+    await p.check('input[type="checkbox"]');
+    await p.click('button[type="submit"]');
+    await p.waitForTimeout(500);
+    const sameErr = await p.locator("main, body").innerText();
+    check("8Bb. Using the signed-in account's own email → clear inline error, nothing sent", /the account you're signed in with/i.test(sameErr) && posts.length === 0 && authUsersWithEmail(DESIGNER) === 1);
+
+    // A different email → normal signup: verification email, no session change here.
+    const NEW = unique("second-account");
+    const since = Date.now();
+    await p.fill("#email", NEW);
+    await p.click('button[type="submit"]');
+    await p.waitForURL(/\/verify-email/, { timeout: 20000 }).catch(() => undefined);
+    check("8Bc. A different email → /verify-email (verification required), exactly one new, unconfirmed account", p.url().includes("/verify-email") && authUsersWithEmail(NEW) === 1 && dbCount(`SELECT count(*) FROM auth.users WHERE email='${NEW}' AND email_confirmed_at IS NULL`) === 1, p.url());
+    const still = await p.evaluate(async () => (await (await fetch("/api/auth/session")).json()));
+    check("8Bd. This browser is STILL the designer (not replaced): same user id, designer role, same email", still.userId === designerId && still.email === DESIGNER && still.hasDesignerProfile, still);
+    check("8Be. The new email was not attached to the existing account (separate auth user)", dbCount(`SELECT count(*) FROM auth.users WHERE email='${NEW}' AND id <> '${designerId}'`) === 1 && dbValue(`SELECT email FROM auth.users WHERE id = '${designerId}'`) === DESIGNER);
+
+    // The new account's link on another device → normal verification + role selection for the NEW account.
+    const { href } = await mailFor(NEW, SUBJECT.signup, since);
+    const phone = await visit(href);
+    const phoneMe = await session(merge("", phone.res));
+    check("8Bf. The new account's link on another device → /choose-role?confirmed=signup, signed in as the NEW account with no role", phone.location.endsWith("/choose-role?confirmed=signup") && phoneMe.email === NEW && phoneMe.userId !== designerId && !phoneMe.hasCustomerProfile && !phoneMe.hasDesignerProfile, { loc: phone.location, phoneMe });
+
+    // The original browser and account are untouched throughout.
+    await p.goto(`${APP_URL}/designer/home`, { waitUntil: "networkidle" });
+    const homeOk = new URL(p.url()).pathname === "/designer/home";
+    const after = await p.evaluate(async () => (await (await fetch("/api/auth/session")).json()));
+    check("8Bg. Original browser still signed in to the designer account and can open its dashboard", homeOk && after.userId === designerId && after.hasDesignerProfile, { url: p.url(), after });
+    check("8Bh. The existing account's data is unchanged (auth email, user row, designer profile/studio, projects, collections, no customer profile added)", fingerprint() === before, { before, after: fingerprint() });
+
+    // Direct API attempt with the existing email (bypassing the form) → refused, account unchanged.
+    const direct = await signup(DESIGNER, designerJar);
+    check("8Bi. Direct signup request with the signed-in account's email → refused (email_exists), nothing changed", direct.status === 409 && direct.data.code === "email_exists" && fingerprint() === before && authUsersWithEmail(DESIGNER) === 1, direct.data);
+    await context.close();
+  } else {
+    console.log("  ! playwright unavailable — section 8B skipped");
   }
 
   if (browser) await browser.close();
