@@ -10,6 +10,9 @@ import { createClient } from "@/lib/supabase/server";
 import { listApprovedDesigners, listDresses, getPlatformStats } from "@/lib/customer/discovery";
 import { redirect } from "next/navigation";
 import { strayEmailLinkPath } from "@/lib/auth/auth-flows";
+import { DEFAULT_DESCRIPTION, DEFAULT_TITLE, pageMetadata } from "@/lib/seo";
+
+export const metadata = pageMetadata({ title: DEFAULT_TITLE, absoluteTitle: true, description: DEFAULT_DESCRIPTION, path: "/" });
 
 // The landing page is a thin server-side orchestrator: fetch real data once, hand it down to six
 // section components (components/landing/sections/) rather than one giant page file. No mock/seed

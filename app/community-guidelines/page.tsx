@@ -1,5 +1,12 @@
 import Link from "next/link";
 import { PolicyPage, type PolicySection } from "@/components/layout/PolicyPage";
+import { pageMetadata } from "@/lib/seo";
+
+export const metadata = pageMetadata({
+  title: "Community Guidelines",
+  description: "Guidelines for everywhere people share or see each other's content on HRUNA — designer studio pages, portfolios, reviews and direct messages.",
+  path: "/community-guidelines",
+});
 
 const sections: PolicySection[] = [
   {

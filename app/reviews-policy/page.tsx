@@ -1,5 +1,12 @@
 import Link from "next/link";
 import { PolicyPage, type PolicySection } from "@/components/layout/PolicyPage";
+import { pageMetadata } from "@/lib/seo";
+
+export const metadata = pageMetadata({
+  title: "Reviews & Ratings Policy",
+  description: "Rules for the customer-authored reviews and ratings shown on HRUNA designer studio pages.",
+  path: "/reviews-policy",
+});
 
 const sections: PolicySection[] = [
   {

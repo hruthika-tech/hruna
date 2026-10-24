@@ -1,5 +1,12 @@
 import Link from "next/link";
 import { PolicyPage, type PolicySection } from "@/components/layout/PolicyPage";
+import { pageMetadata } from "@/lib/seo";
+
+export const metadata = pageMetadata({
+  title: "Account Suspension & Termination Policy",
+  description: "What can happen to a HRUNA account, including suspension and termination, and exactly how account deletion works today.",
+  path: "/account-policy",
+});
 
 const sections: PolicySection[] = [
   {

@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { Playfair_Display, DM_Sans, Caveat } from "next/font/google";
 import "./globals.css";
 import { ToastProvider } from "@/hooks/use-toast";
+import { DEFAULT_DESCRIPTION, DEFAULT_OG_IMAGE, DEFAULT_TITLE, SITE_NAME, SITE_URL } from "@/lib/seo";
 
 const playfair = Playfair_Display({
   subsets: ["latin"],
@@ -23,10 +24,29 @@ const caveat = Caveat({
   weight: ["500", "600", "700"],
 });
 
+// Site-wide defaults (lib/seo.ts). No canonical here on purpose: Next would inherit it into every
+// page that doesn't set its own, pointing them all at the homepage — public pages set theirs via
+// pageMetadata(). Icons come from the app/favicon.ico, app/icon.png and app/apple-icon.png file
+// conventions; the default share image is public/brand/hruna-og.png.
 export const metadata: Metadata = {
-  title: "HRUNA — Where Vision Meets Craft",
-  description:
-    "HRUNA connects you with verified fashion designers, tailors and boutiques to bring your dream garment to life — from private commission to final fitting.",
+  metadataBase: new URL(SITE_URL),
+  applicationName: SITE_NAME,
+  title: { default: DEFAULT_TITLE, template: `%s | ${SITE_NAME}` },
+  description: DEFAULT_DESCRIPTION,
+  openGraph: {
+    type: "website",
+    siteName: SITE_NAME,
+    locale: "en_IN",
+    title: DEFAULT_TITLE,
+    description: DEFAULT_DESCRIPTION,
+    images: [DEFAULT_OG_IMAGE],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: DEFAULT_TITLE,
+    description: DEFAULT_DESCRIPTION,
+    images: [DEFAULT_OG_IMAGE],
+  },
 };
 
 // The phone keyboard resizes the page (not just overlays it), so fixed/full-height layouts such as

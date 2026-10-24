@@ -1,5 +1,12 @@
 import Link from "next/link";
 import { ContentPage } from "@/components/layout/ContentPage";
+import { pageMetadata } from "@/lib/seo";
+
+export const metadata = pageMetadata({
+  title: "Help Center",
+  description: "Answers to common questions about using HRUNA — your account, finding designers, requests, projects, messaging, your profile and saved favourites.",
+  path: "/help",
+});
 
 const TOPICS = [
   {

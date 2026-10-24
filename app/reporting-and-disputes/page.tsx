@@ -1,5 +1,12 @@
 import Link from "next/link";
 import { PolicyPage, type PolicySection } from "@/components/layout/PolicyPage";
+import { pageMetadata } from "@/lib/seo";
+
+export const metadata = pageMetadata({
+  title: "Reporting, Complaints & Disputes",
+  description: "How to raise a concern, complaint or dispute with HRUNA, and how it's handled today.",
+  path: "/reporting-and-disputes",
+});
 
 const sections: PolicySection[] = [
   {

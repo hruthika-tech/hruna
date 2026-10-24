@@ -1,6 +1,13 @@
 import Link from "next/link";
 import { Mail } from "lucide-react";
 import { ContentPage } from "@/components/layout/ContentPage";
+import { pageMetadata } from "@/lib/seo";
+
+export const metadata = pageMetadata({
+  title: "Contact Support",
+  description: "How to get help with HRUNA. A dedicated support channel is still being set up; most questions are answered in the HRUNA Help Center.",
+  path: "/support",
+});
 
 // Honest, non-fake Contact Support state: there's no ticketing/email backend wired up yet, so this
 // deliberately does NOT pretend to submit a form. It's a clearly-labeled temporary state with a

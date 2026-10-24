@@ -1,4 +1,11 @@
 import { PolicyPage, RoleList, type PolicySection } from "@/components/layout/PolicyPage";
+import { pageMetadata } from "@/lib/seo";
+
+export const metadata = pageMetadata({
+  title: "Designer–Customer Collaboration Policy",
+  description: "How customers and designers are expected to work together on HRUNA, end to end.",
+  path: "/collaboration-policy",
+});
 
 const sections: PolicySection[] = [
   {

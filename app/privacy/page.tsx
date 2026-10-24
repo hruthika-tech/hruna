@@ -1,5 +1,12 @@
 import Link from "next/link";
 import { PolicyPage, type PolicySection } from "@/components/layout/PolicyPage";
+import { pageMetadata } from "@/lib/seo";
+
+export const metadata = pageMetadata({
+  title: "Privacy Policy",
+  description: "What information HRUNA collects, why, and how it's used — based on how the platform actually works today.",
+  path: "/privacy",
+});
 
 // Reflects the actual data architecture as implemented — not a generic template. Every category
 // below corresponds to a real table/column/bucket in the app; nothing is claimed that the codebase

@@ -1,5 +1,12 @@
 import Link from "next/link";
 import { PolicyPage, type PolicySection } from "@/components/layout/PolicyPage";
+import { pageMetadata } from "@/lib/seo";
+
+export const metadata = pageMetadata({
+  title: "Acceptable Use Policy",
+  description: "Rules for technical and platform-level use of HRUNA — what is and isn't allowed when using the platform.",
+  path: "/acceptable-use",
+});
 
 const sections: PolicySection[] = [
   {

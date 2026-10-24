@@ -1,5 +1,12 @@
 import Link from "next/link";
 import { PolicyPage, type PolicySection } from "@/components/layout/PolicyPage";
+import { pageMetadata } from "@/lib/seo";
+
+export const metadata = pageMetadata({
+  title: "Terms of Use",
+  description: "The terms that govern your use of HRUNA, a platform that facilitates connection and collaboration between customers and independent fashion designers.",
+  path: "/terms",
+});
 
 const sections: PolicySection[] = [
   {

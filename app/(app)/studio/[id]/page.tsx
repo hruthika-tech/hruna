@@ -1,6 +1,9 @@
+import { cache } from "react";
+import type { Metadata } from "next";
 import Image from "next/image";
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { NOINDEX_FOLLOW, pageMetadata, truncateDescription } from "@/lib/seo";
 import { ZoomableImage } from "@/components/ui/ImageLightbox";
 import { MapPin, Clock, Mail, ArrowRight, CheckCircle2, Award } from "lucide-react";
 import { Avatar, Badge } from "@/components/ui/Badge";
@@ -21,9 +24,31 @@ import { DressAvailabilityNote } from "@/components/dresses/DressAvailabilityNot
 // Always render with the latest saved studio data — never a cached copy.
 export const dynamic = "force-dynamic";
 
+// One bundle load per request, shared by generateMetadata() and the page (React cache()).
+const loadStudio = cache((id: string) => getStudioBundle(createClient(), id));
+
+// Search metadata from the same public data the page shows. Approved studios are indexable with
+// their own canonical; unapproved ones stay reachable by direct link but are marked noindex. This
+// only changes <head> tags — who can open the page and what it shows are unchanged.
+export async function generateMetadata({ params }: { params: { id: string } }): Promise<Metadata> {
+  const bundle = await loadStudio(params.id);
+  if (!bundle) return { title: "Studio not found", robots: NOINDEX_FOLLOW };
+  const { designer } = bundle;
+  const city = designer.city.trim();
+  const description = designer.bio.trim()
+    ? truncateDescription(designer.bio)
+    : `${designer.studioName} is a ${designer.type.toLowerCase()}${city ? ` in ${city}` : ""} on HRUNA. View their studio, collections and work.`;
+  return pageMetadata({
+    title: city ? `${designer.studioName} — ${designer.type} in ${city}` : `${designer.studioName} — ${designer.type}`,
+    description,
+    path: `/studio/${designer.id}`,
+    images: designer.banner ? [designer.banner] : undefined,
+    robots: designer.verified ? undefined : NOINDEX_FOLLOW,
+  });
+}
+
 export default async function PublicStudioPage({ params }: { params: { id: string } }) {
-  const supabase = createClient();
-  const bundle = await getStudioBundle(supabase, params.id);
+  const bundle = await loadStudio(params.id);
   if (!bundle) notFound();
 
   const { designer, collections: studioCollections, dresses: studioDresses, reviews: studioReviews, completedProjectCount: completedCount, isTrustedProfessional } = bundle;

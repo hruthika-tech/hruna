@@ -22,9 +22,19 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/supabase/types";
 import { mapDesignerProfile, mapDress, mapCollection, resolveStudioImage, resolveDressImages } from "@/lib/designer/data";
 import { getAdminOwnedDesignerIds, isAdminOwnedDesigner } from "@/lib/supabase/authorization";
+import { isUuid } from "@/lib/moderation/reports";
 import type { Designer } from "@/types";
 
 type Supa = SupabaseClient<Database>;
+
+/** The designer fields a server-rendered dress/collection page sends to the browser — only what
+ *  those pages display (and nothing they don't, e.g. contact email or story). `verified` is the
+ *  designer's approval, which also decides whether the page may be indexed. */
+export type PublicDesignerSummary = Pick<Designer, "id" | "name" | "studioName" | "avatar" | "verified" | "city">;
+
+export function toPublicDesignerSummary(d: Designer): PublicDesignerSummary {
+  return { id: d.id, name: d.name, studioName: d.studioName, avatar: d.avatar, verified: d.verified, city: d.city };
+}
 
 async function mapDesignerRow(supabase: Supa, designer: any, isApproved: boolean): Promise<Designer> {
   const displayName = designer.users?.display_name ?? "";
@@ -108,6 +118,35 @@ export async function listApprovedDesigners(supabase: Supa, limit?: number) {
   return Promise.all((designers ?? []).map((d) => mapDesignerRow(supabase, d, true)));
 }
 
+/** Approved designers' studio ids + last update, for app/sitemap.ts — same approval gate as the
+ *  public catalog (getApprovedIds), and nothing beyond the id and timestamp is read. */
+export async function listApprovedStudioSitemapEntries(supabase: Supa): Promise<{ id: string; updatedAt: string }[]> {
+  const approvedIds = await getApprovedIds(supabase);
+  if (approvedIds.length === 0) return [];
+
+  const { data, error } = await supabase.from("designer_profiles").select("id, updated_at").in("id", approvedIds).order("created_at", { ascending: true });
+  if (error) throw error;
+  return (data ?? []).map((d) => ({ id: d.id, updatedAt: d.updated_at }));
+}
+
+/** Dress and collection ids + last update for app/sitemap.ts — only items of approved designers,
+ *  the same rule as the public catalog (listDresses/listCollections). Nothing else is read. */
+export async function listApprovedCatalogSitemapEntries(
+  supabase: Supa
+): Promise<{ dresses: { id: string; updatedAt: string }[]; collections: { id: string; updatedAt: string }[] }> {
+  const approvedIds = await getApprovedIds(supabase);
+  if (approvedIds.length === 0) return { dresses: [], collections: [] };
+
+  const [dresses, collections] = await Promise.all([
+    supabase.from("dresses").select("id, updated_at").in("designer_id", approvedIds).order("created_at", { ascending: true }),
+    supabase.from("collections").select("id, updated_at").in("designer_id", approvedIds).order("created_at", { ascending: true }),
+  ]);
+  if (dresses.error) throw dresses.error;
+  if (collections.error) throw collections.error;
+  const entry = (r: { id: string; updated_at: string }) => ({ id: r.id, updatedAt: r.updated_at });
+  return { dresses: (dresses.data ?? []).map(entry), collections: (collections.data ?? []).map(entry) };
+}
+
 /** Dresses from approved designers only, newest first — used by Home's "Ready-made pieces". */
 export async function listDresses(supabase: Supa, limit = 8) {
   const approvedIds = await getApprovedIds(supabase);
@@ -147,6 +186,8 @@ export async function listCollections(supabase: Supa, limit = 6) {
 
 /** One dress + its designer's public summary — powers /dresses/[id]. */
 export async function getDressDetail(supabase: Supa, dressId: string) {
+  // A malformed id can't match any dress: "not found", not a Postgres uuid-cast error (a 500).
+  if (!isUuid(dressId)) return null;
   const { data: dressRow, error } = await supabase.from("dresses").select("*").eq("id", dressId).maybeSingle();
   if (error) throw error;
   if (!dressRow || (await isAdminOwnedDesigner(dressRow.designer_id))) return null;
@@ -179,6 +220,7 @@ export async function getPlatformStats(supabase: Supa) {
 
 /** One collection + its dresses + its designer's public summary — powers /collections/[id]. */
 export async function getCollectionDetail(supabase: Supa, collectionId: string) {
+  if (!isUuid(collectionId)) return null;
   const { data: collectionRow, error } = await supabase.from("collections").select("*").eq("id", collectionId).maybeSingle();
   if (error) throw error;
   if (!collectionRow || (await isAdminOwnedDesigner(collectionRow.designer_id))) return null;

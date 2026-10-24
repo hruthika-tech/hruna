@@ -1,5 +1,12 @@
 import Link from "next/link";
 import { PolicyPage, type PolicySection } from "@/components/layout/PolicyPage";
+import { pageMetadata } from "@/lib/seo";
+
+export const metadata = pageMetadata({
+  title: "Content & Intellectual Property Policy",
+  description: "Who owns the creative work shared on HRUNA, who is responsible for it, and how intellectual-property infringement is handled.",
+  path: "/content-policy",
+});
 
 const sections: PolicySection[] = [
   {

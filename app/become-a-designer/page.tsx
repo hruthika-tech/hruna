@@ -1,6 +1,13 @@
 import Image from "next/image";
 import { LinkButton } from "@/components/ui/Button";
 import { Footer } from "@/components/layout/Footer";
+import { pageMetadata } from "@/lib/seo";
+
+export const metadata = pageMetadata({
+  title: "Become a Designer",
+  description: "Designers, boutiques and tailors: bring your atelier to HRUNA. Set up verification and your studio, and start receiving fashion requests from customers.",
+  path: "/become-a-designer",
+});
 
 export default function BecomeADesignerPage() {
   return (

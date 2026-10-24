@@ -22,7 +22,7 @@ export function Hero() {
 
       <div className="container-editorial grid grid-cols-1 md:grid-cols-[1.1fr_0.9fr] gap-12 items-center py-20">
         <div>
-          <span className="font-display text-6xl sm:text-7xl md:text-8xl text-scrapbook-forest tracking-tight flex">
+          <h1 className="font-display text-6xl sm:text-7xl md:text-8xl text-scrapbook-forest tracking-tight flex">
             {WORDMARK.map((letter, i) => (
               <span
                 key={i}
@@ -32,7 +32,7 @@ export function Hero() {
                 {letter}
               </span>
             ))}
-          </span>
+          </h1>
 
           <p className="font-display italic text-2xl sm:text-3xl text-scrapbook-forest/80 mt-4 animate-[slideUp_0.6s_ease-out_0.55s_both]">
             Where your style finds its story.

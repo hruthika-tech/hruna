@@ -14,6 +14,7 @@ import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/supabase/types";
 import { isAdminOwnedDesigner } from "@/lib/supabase/authorization";
+import { isUuid } from "@/lib/moderation/reports";
 import {
   mapDesignerProfile,
   mapCollection,
@@ -27,6 +28,9 @@ import {
 } from "@/lib/designer/data";
 
 export async function getStudioBundle(supabase: SupabaseClient<Database>, designerId: string) {
+  // A malformed id can't match any studio — answer "not found" instead of letting Postgres reject
+  // the uuid cast (which surfaced as a 500 on /studio/<anything>).
+  if (!isUuid(designerId)) return null;
   const { data: designer, error } = await supabase
     .from("designer_profiles")
     .select("*, users(display_name)")
