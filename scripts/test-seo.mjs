@@ -3,7 +3,9 @@
 // unique titles, descriptions, a www.hruna.in canonical and Open Graph / X card tags; sign-in and
 // email-link pages are noindex; unapproved studios stay reachable but noindex; malformed studio ids
 // are a 404 (not a 500); the homepage has exactly one <h1>; private pages still redirect to sign-in;
-// the favicon, app icons and 1200x630 share image exist with the sizes and transparency the <head> claims;
+// the favicon, app icons, main logo and 1200x630 share image are the new white hanger-and-H logo
+// (the supplied public/brand/favicon_io files), at the sizes the <head> claims, and the old red
+// emblem is neither served nor referenced;
 // dress and collection pages are server-rendered with their own metadata, 404 when missing, and are
 // indexable (and in the sitemap) only for approved designers, without leaking non-displayed fields.
 // It adds and removes one local fixture collection + dress for an unapproved designer.
@@ -11,7 +13,10 @@
 // Supabase whose DB container is HRUNA_TEST_DB_CONTAINER. Run: node scripts/test-seo.mjs
 
 import { execSync } from "node:child_process";
-import { readdirSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
+import { createHash } from "node:crypto";
+import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 
 const APP_URL = process.env.HRUNA_TEST_APP_URL ?? "http://localhost:3100";
 if (!/^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(APP_URL)) throw new Error(`Refusing non-local app ${APP_URL}`);
@@ -197,15 +202,55 @@ console.log("\n=== Brand assets: icons and share image exist and are what the <h
   const sizes = [...Array(count)].map((_, i) => f.buf[6 + i * 16] || 256).sort((a, b) => a - b);
   check("/favicon.ico: 200, an ICO with 16, 32 and 48px images", f.status === 200 && f.buf.readUInt16LE(2) === 1 && JSON.stringify(sizes) === "[16,32,48]", { status: f.status, sizes });
 
-  for (const [path, w, h, alpha] of [["/icon.png", 512, 512, true], ["/apple-icon.png", 180, 180, false], ["/brand/hruna-logo.png", 1448, 1448, true], ["/brand/hruna-og.png", 1200, 630, false]]) {
+  // [served path, width, height, PNG colour type (6 = RGBA, 2 = RGB)]
+  const served = {};
+  for (const [path, w, h, colorType] of [["/icon.png", 512, 512, 6], ["/apple-icon.png", 180, 180, 6], ["/brand/hruna-logo.png", 512, 512, 6], ["/brand/hruna-og.png", 1200, 630, 2]]) {
     const r = await bin(path.startsWith("/icon") || path.startsWith("/apple") ? (links.find((l) => l.href?.startsWith(path))?.href ?? path) : path);
+    served[path] = r.buf;
     const p = r.status === 200 ? png(r.buf) : {};
-    check(`${path}: 200 image/png, ${w}x${h}, ${alpha ? "with" : "without"} transparency (square: ${w === h})`, r.status === 200 && r.type.startsWith("image/png") && p.sig && p.w === w && p.h === h && (alpha ? p.colorType === 6 : p.colorType === 2), { status: r.status, type: r.type, ...p });
+    check(`${path}: 200 image/png, ${w}x${h} (square: ${w === h})`, r.status === 200 && r.type.startsWith("image/png") && p.sig && p.w === w && p.h === h && p.colorType === colorType, { status: r.status, type: r.type, ...p });
   }
   // On disk, not over HTTP: Windows dev servers ignore case, Vercel (Linux) does not.
   const publicDirs = readdirSync(new URL("../public", import.meta.url));
   const brandFiles = readdirSync(new URL("../public/brand", import.meta.url));
-  check("public/brand is lowercase, no capitalised Brand folder, exactly the two brand files", publicDirs.includes("brand") && !publicDirs.includes("Brand") && JSON.stringify(brandFiles.sort()) === '["hruna-logo.png","hruna-og.png"]', { publicDirs, brandFiles });
+  check("public/brand is lowercase, no capitalised Brand folder: the logo, the share image and the favicon_io set", publicDirs.includes("brand") && !publicDirs.includes("Brand") && JSON.stringify(brandFiles.sort()) === '["favicon_io","hruna-logo.png","hruna-og.png"]', { publicDirs, brandFiles });
+
+  // The official logo is the SUPPLIED white hanger-and-H on black (public/brand/favicon_io). Every
+  // icon and the main logo file are those supplied files, served byte-for-byte.
+  const faviconSet = (name) => readFileSync(new URL(`../public/brand/favicon_io/${name}`, import.meta.url));
+  check("/favicon.ico is exactly favicon_io/favicon.ico", f.buf.equals(faviconSet("favicon.ico")));
+  check("/icon.png is exactly favicon_io/android-chrome-512x512.png", served["/icon.png"].equals(faviconSet("android-chrome-512x512.png")));
+  check("/apple-icon.png is exactly favicon_io/apple-touch-icon.png", served["/apple-icon.png"].equals(faviconSet("apple-touch-icon.png")));
+  check("/brand/hruna-logo.png (main logo) is exactly favicon_io/android-chrome-512x512.png", served["/brand/hruna-logo.png"].equals(faviconSet("android-chrome-512x512.png")));
+
+  // The previous red dress emblem: SHA-256 of every asset that carried it (as committed in 57d4d1c).
+  // None of them may be served, or referenced by active code, any more.
+  const OLD_EMBLEM = new Set([
+    "89ffbe1317040019ea8d1b84992271f5ec3f769ed5b2499ac1c57314c0f77e4a", // app/favicon.ico
+    "557d15ca718d2780189d24616b1307dccc531bc406a8f36e0e66eec482af79bf", // app/icon.png
+    "36d5284557843e54054fa50810a147fe55d57a3205b65c523e2c376156d2a8b6", // app/apple-icon.png
+    "b81bb0cc499d3847bf6e280498d988cd893cd14b0d6b0c157905266ad605d5aa", // public/brand/hruna-logo.png
+    "7387fe74d39397e3ed84df7fcda216e7d589d0bca6300cfc18f072c23c7dc8c3", // public/brand/hruna-og.png
+  ]);
+  const sha = (buf) => createHash("sha256").update(buf).digest("hex");
+  const stillOld = Object.entries({ "/favicon.ico": f.buf, ...served }).filter(([, buf]) => OLD_EMBLEM.has(sha(buf))).map(([p]) => p);
+  check("no served icon, logo or share image is the old red emblem", stillOld.length === 0, stillOld);
+  // Every image under /brand/ (or an app icon) that active code points at must exist and be new.
+  const sources = [];
+  const walk = (dir) => {
+    for (const e of readdirSync(dir, { withFileTypes: true })) {
+      const p = join(dir, e.name);
+      if (e.isDirectory()) walk(p);
+      else if (/\.(tsx?|jsx?|css|json)$/.test(e.name)) sources.push(p);
+    }
+  };
+  for (const d of ["app", "components", "lib", "hooks"]) walk(fileURLToPath(new URL(`../${d}`, import.meta.url)));
+  const refs = [...new Set(sources.flatMap((p) => readFileSync(p, "utf8").match(/\/brand\/[\w./-]+\.(png|jpe?g|webp|svg|ico)/g) ?? []))];
+  const badRefs = refs.filter((r) => {
+    const file = new URL(`../public${r}`, import.meta.url);
+    try { return OLD_EMBLEM.has(sha(readFileSync(file))); } catch { return true; }
+  });
+  check(`active code's brand image references (${refs.join(", ")}) all exist and none is the old emblem`, refs.length > 0 && badRefs.length === 0, badRefs);
 }
 
 console.log("\n=== Sign-in and email-link pages: noindex ===");
