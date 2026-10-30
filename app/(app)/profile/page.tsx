@@ -309,7 +309,7 @@ export default function ProfilePage() {
             <Field label="City" htmlFor="city"><Input id="city" value={form.city} onChange={(e) => setForm((f) => ({ ...f, city: e.target.value }))} /></Field>
             <div className="flex flex-wrap gap-3 mt-2">
               <Button onClick={saveProfile} disabled={saving}>{saving ? "Saving…" : "Save Changes"}</Button>
-              <LinkButton href="/subscription" variant="secondary">Manage Subscription</LinkButton>
+              <LinkButton href="/subscription" variant="secondary">Membership</LinkButton>
             </div>
           </div>
         )}

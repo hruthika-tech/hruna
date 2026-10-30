@@ -8,6 +8,7 @@
 
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { planRoomResponse } from "@/lib/subscriptions/designer-plans";
 import { requireDesigner } from "@/lib/supabase/authorization";
 import { errorResponse } from "@/lib/supabase/errors";
 import { areFilesOwnedInBucket } from "@/lib/supabase/storage";
@@ -26,6 +27,9 @@ export async function POST(request: Request) {
     }
 
     const supabase = createClient();
+    // Designer plan: previous creations count toward the plan's limit. The database trigger enforces the same limit atomically.
+    const noRoom = await planRoomResponse("previous_creations", supabase);
+    if (noRoom) return noRoom;
     // The image(s) must be the caller's own uploads in the public studio-images bucket — checked
     // before any write, so a rejected request changes nothing.
     if (!(await areFilesOwnedInBucket(supabase, [imageFileId], ctx.user.id, "studioImages"))) {

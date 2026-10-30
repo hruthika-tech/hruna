@@ -25,6 +25,11 @@ export async function PATCH(request: Request) {
       patch.payment_system_enabled = body.paymentSystemEnabled;
       changes.push(`payment system ${body.paymentSystemEnabled ? "enabled" : "disabled"}`);
     }
+    // Customers use HRUNA for free. The legacy switch can only be turned off (it has no effect
+    // either way — customer pages are never gated and customer checkout is refused).
+    if (body?.customerSubscriptionsEnabled === true) {
+      return NextResponse.json({ status: "error", message: "Customers use HRUNA for free — customer subscriptions can't be switched on." }, { status: 400 });
+    }
     if (typeof body?.customerSubscriptionsEnabled === "boolean") {
       patch.customer_subscriptions_enabled = body.customerSubscriptionsEnabled;
       changes.push(`customer subscriptions ${body.customerSubscriptionsEnabled ? "enabled" : "disabled"}`);

@@ -13,6 +13,7 @@
 
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { planRoomResponse } from "@/lib/subscriptions/designer-plans";
 import { requireApprovedDesigner } from "@/lib/supabase/authorization";
 import { errorResponse } from "@/lib/supabase/errors";
 import { mapProposal, mapRequest, resolveRequestImages } from "@/lib/designer/data";
@@ -72,6 +73,14 @@ export async function POST(request: Request) {
     }
 
     const supabase = createClient();
+    // One proposal per request (also enforced by the database), then the plan's monthly quota
+    // (calendar month, India Standard Time — counted and enforced atomically by the database too).
+    const { data: mine } = await supabase.from("proposals").select("id").eq("request_id", requestId).eq("designer_id", ctx.designerId).limit(1);
+    if ((mine ?? []).length > 0) {
+      return NextResponse.json({ status: "error", code: "duplicate_proposal", message: "You've already sent a proposal for this request." }, { status: 409 });
+    }
+    const noRoom = await planRoomResponse("proposals_per_month", supabase);
+    if (noRoom) return noRoom;
     // Read with the designer's own client (RLS): a request they can't see falls through to the insert,
     // which RLS refuses as before. A visible but closed request gets a clear answer instead of a stray
     // pending proposal that could never be accepted.

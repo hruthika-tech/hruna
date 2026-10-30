@@ -42,8 +42,18 @@ export async function GET() {
       type: customerUserIds.has(userId) ? ("Customer" as const) : ("Designer" as const),
     });
 
+    // Designer plans (Free / Plus / Pro, ordered by tier) vs retired plans kept only for history
+    // (the old single customer and designer plans) — the latter are read-only.
+    const mappedPlans = (plans ?? []).map(mapSubscriptionPlan);
+    const designerPlans = mappedPlans.filter((p) => !p.legacy).sort((a, b) => (a.tierRank ?? 0) - (b.tierRank ?? 0));
+    const legacyPlans = mappedPlans.filter((p) => p.legacy);
+    const planById = new Map(mappedPlans.map((p) => [p.id, p]));
+
     return NextResponse.json({
       status: "ok",
+      plansReady: designerPlans.length > 0,
+      designerPlans,
+      legacyPlans,
       settings: settings
         ? {
             paymentSystemEnabled: settings.payment_system_enabled,
@@ -53,9 +63,12 @@ export async function GET() {
             updatedAt: settings.updated_at,
           }
         : null,
-      plans: (plans ?? []).map(mapSubscriptionPlan),
+      plans: mappedPlans,
       subscriptions: (subs ?? []).map((s) => ({ ...mapUserSubscription(s), user: userSummary(s.user_id) })),
-      payments: (payments ?? []).map((p) => ({ ...mapPayment(p), user: userSummary(p.user_id) })),
+      payments: (payments ?? []).map((p) => {
+        const plan = p.plan_id ? planById.get(p.plan_id) : undefined;
+        return { ...mapPayment(p), user: userSummary(p.user_id), planName: plan?.name ?? null, planRole: plan?.role ?? null, planLegacy: plan?.legacy ?? null };
+      }),
     });
   } catch (err) {
     return errorResponse(err, "api.admin.subscriptions.get");

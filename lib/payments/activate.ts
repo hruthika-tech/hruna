@@ -18,6 +18,8 @@ import "server-only";
 
 import { createAdminClient } from "@/lib/supabase/admin";
 import type { Tables } from "@/lib/supabase/types";
+import type { SupabaseClient } from "@supabase/supabase-js";
+import { isPlansNotReadyError } from "@/lib/subscriptions/plans";
 
 export interface ActivationResult {
   payment: Tables<"payments">;
@@ -66,6 +68,21 @@ export async function activateSubscriptionForPayment(paymentId: string, razorpay
   const now = new Date();
   const end = new Date(now);
   end.setMonth(end.getMonth() + 1);
+
+  // A paid plan replaces a running trial (ended now), and a row past its end date is expired:
+  // record both, so the one-active-subscription index admits the new paid row instead of this
+  // payment being linked to the trial.
+  const nowIso = now.toISOString();
+  const subs = (supabase as unknown as SupabaseClient).from("user_subscriptions");
+  const { error: endTrialError } = await subs
+    .update({ status: "expired", end_date: nowIso, updated_at: nowIso })
+    .eq("user_id", payment.user_id).eq("role", plan.role).eq("status", "active").eq("is_trial", true);
+  // No is_trial column = the plan migrations aren't applied, so there are no trials to end.
+  if (endTrialError && !isPlansNotReadyError(endTrialError)) throw endTrialError;
+  const { error: lapseError } = await (supabase as unknown as SupabaseClient).from("user_subscriptions")
+    .update({ status: "expired", updated_at: nowIso })
+    .eq("user_id", payment.user_id).eq("role", plan.role).eq("status", "active").lte("end_date", nowIso);
+  if (lapseError) throw lapseError;
 
   const { data: subscription, error: insertError } = await supabase
     .from("user_subscriptions")

@@ -1,21 +1,14 @@
-import { SubscriptionPageContent } from "@/components/subscription/SubscriptionPageContent";
-import { createClient } from "@/lib/supabase/server";
-import { getAuthContext } from "@/lib/supabase/authorization";
-import { getSubscriptionSummary } from "@/lib/subscription-access";
+import { DesignerPlansView } from "./DesignerPlansView";
 
-export default async function DesignerSubscriptionPage() {
-  const ctx = await getAuthContext();
-  const supabase = createClient();
-  const summary = ctx
-    ? await getSubscriptionSummary(supabase, ctx.user.id, "designer")
-    : { enforced: false, plan: null, subscription: null };
-
+// Designer plans (Free / Designer Plus / Designer Pro) and the one-time Designer Pro trial. The
+// page itself is just a frame: plan data, usage and every action go through /api/designer/plan and
+// the existing /api/payments/* routes, which enforce the rules server-side.
+export default function DesignerSubscriptionPage() {
   return (
-    <SubscriptionPageContent
-      role="designer"
-      summary={summary}
-      brandLabel="HRUNA STUDIO"
-      backHref="/designer/home"
-    />
+    <div className="min-h-screen bg-surface">
+      <div className="container-editorial py-12 md:py-16 pb-section-gap">
+        <DesignerPlansView />
+      </div>
+    </div>
   );
 }

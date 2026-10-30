@@ -244,3 +244,9 @@ values
    'Full access to studio management, customer requests, and project tools.',
    array['Public designer profile & Studio', 'Manage Studio', 'Receive & respond to customer requests',
          'Send proposals', 'Manage active projects', 'Messages & reviews']);
+
+-- The legacy single designer plan above is retired: designer plans are Free / Designer Plus /
+-- Designer Pro, created by migration 20261029000001_designer_subscription_plans.sql (which retires
+-- this plan on databases where it already exists; locally the seed runs after it, so retire it here).
+-- The customer plan stays only for history — customers use HRUNA for free.
+update public.subscription_plans set is_active = false where role = 'designer' and plan_key is null;

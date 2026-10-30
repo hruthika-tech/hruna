@@ -1,11 +1,15 @@
 import "server-only";
 
 /**
- * Real subscription-gate check (Phase 7 fix, extended Phase 8 for real Razorpay-backed state) —
- * app/(app)/layout.tsx and app/(designer)/layout.tsx wrap EVERY customer/designer page in
- * <SubscriptionGate>; both read from here, never the mock store. `payment_system_enabled` stays
- * the master switch (Phase 6 admin control) — while it's off (still the seeded default), access
- * is unconditionally granted and nothing here calls Razorpay or touches payment state at all.
+ * Whole-app subscription gate (app/(app)/layout.tsx, app/(designer)/layout.tsx → <SubscriptionGate>).
+ *
+ * Nobody is locked out of HRUNA any more:
+ *   - customers use the marketplace for free — there is no customer subscription;
+ *   - every designer is at least on the Free plan. What a plan allows (listings, proposals,
+ *     analytics) is enforced per feature in the APIs and the database
+ *     (lib/subscriptions/designer-plans.ts, migration 20261029000001_designer_subscription_plans.sql),
+ *     not by hiding pages — a layout-level gate could never stop a direct API call anyway.
+ * The gate component stays in place so a future whole-app restriction has one switch.
  */
 
 import type { SupabaseClient } from "@supabase/supabase-js";
@@ -18,31 +22,8 @@ export interface SubscriptionAccess {
   plan: { name: string; price: number; currency: string } | null;
 }
 
-export async function getSubscriptionAccess(supabase: Supa, userId: string, role: "customer" | "designer"): Promise<SubscriptionAccess> {
-  const { data: settings } = await supabase.from("payment_settings").select("*").eq("id", true).maybeSingle();
-  const required =
-    !!settings?.payment_system_enabled &&
-    (role === "customer" ? settings?.customer_subscriptions_enabled : settings?.designer_subscriptions_enabled);
-
-  if (!required) return { hasAccess: true, plan: null };
-
-  // Safe as `.maybeSingle()`: the partial unique index user_subscriptions_one_active_per_role
-  // guarantees at most one row can ever match `status = 'active'` for a given (user_id, role).
-  const { data: sub } = await supabase
-    .from("user_subscriptions")
-    .select("status, end_date")
-    .eq("user_id", userId)
-    .eq("role", role)
-    .eq("status", "active")
-    .maybeSingle();
-  const hasAccess = !!sub && (!sub.end_date || new Date(sub.end_date).getTime() >= Date.now());
-  if (hasAccess) return { hasAccess: true, plan: null };
-
-  const { data: planRow } = await supabase.from("subscription_plans").select("name, price, currency").eq("role", role).maybeSingle();
-  return {
-    hasAccess: false,
-    plan: planRow ? { name: planRow.name, price: Number(planRow.price), currency: planRow.currency } : null,
-  };
+export async function getSubscriptionAccess(_supabase: Supa, _userId: string, _role: "customer" | "designer"): Promise<SubscriptionAccess> {
+  return { hasAccess: true, plan: null };
 }
 
 export interface SubscriptionSummary {
@@ -70,7 +51,9 @@ export async function getSubscriptionSummary(supabase: Supa, userId: string, rol
       .order("created_at", { ascending: false })
       .limit(1),
   ]);
-  const enforced = !!settings?.payment_system_enabled && !!(role === "customer" ? settings?.customer_subscriptions_enabled : settings?.designer_subscriptions_enabled);
+  // Customers never need a subscription (the marketplace is free for them); designer plans are shown
+  // by the designer plans page (app/designer-subscription), not through this summary.
+  const enforced = role === "designer" && !!settings?.payment_system_enabled && !!settings?.designer_subscriptions_enabled;
   const subRow = subRows?.[0] ?? null;
 
   // Lazy display-only expiry: an `active` row past its own end_date reads as "expired" here

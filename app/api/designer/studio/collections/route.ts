@@ -6,6 +6,7 @@
 
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { planRoomResponse } from "@/lib/subscriptions/designer-plans";
 import { requireDesigner } from "@/lib/supabase/authorization";
 import { errorResponse } from "@/lib/supabase/errors";
 import { isOwnStudioImage, mapCollection, resolveStudioImage } from "@/lib/designer/data";
@@ -27,6 +28,9 @@ export async function POST(request: Request) {
     }
 
     const supabase = createClient();
+    // Designer plan: collections count toward the plan's limit. The database trigger enforces the same limit atomically.
+    const noRoom = await planRoomResponse("collections", supabase);
+    if (noRoom) return noRoom;
     if (!(await isOwnStudioImage(supabase, coverImageFileId, ctx.user.id))) {
       return NextResponse.json({ status: "error", message: "That cover image couldn't be used. Please upload it again." }, { status: 400 });
     }

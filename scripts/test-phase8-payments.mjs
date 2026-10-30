@@ -49,7 +49,10 @@ const FIXTURE_PAYMENT_1 = "97000000-0000-0000-0000-000000000001";
 const FIXTURE_ORDER_1 = "order_test_fixture_001";
 const FIXTURE_PAYMENT_2 = "97000000-0000-0000-0000-000000000002";
 const FIXTURE_ORDER_2 = "order_test_fixture_002";
-const FIXTURE_AMOUNT_PAISE = 29900; // 299 INR seeded customer plan price, in paise
+const FIXTURE_AMOUNT_PAISE = 19900; // 199 INR Designer Plus price, in paise
+const MEERA_USER = "d0000000-0000-0000-0000-000000000001";
+const DB_CONTAINER = process.env.HRUNA_TEST_DB_CONTAINER ?? "supabase_db_lilirve-app";
+const plus = (extra = {}) => JSON.stringify({ role: "designer", planKey: "designer_plus", ...extra });
 
 let pass = 0;
 let fail = 0;
@@ -67,7 +70,7 @@ function check(label, condition, detail) {
 }
 
 function sql(query) {
-  return execSync(`docker exec -i supabase_db_lilirve-app psql -U postgres -d postgres -t -A -c "${query.replace(/"/g, '\\"')}"`, {
+  return execSync(`docker exec -i ${DB_CONTAINER} psql -U postgres -d postgres -t -A -c "${query.replace(/"/g, '\\"')}"`, {
     encoding: "utf8",
   }).trim();
 }
@@ -111,23 +114,27 @@ async function main() {
 
   console.log("\n=== 1. Unauthenticated user cannot initiate checkout ===");
   {
-    const res = await api(null, "/api/payments/checkout", { method: "POST", body: JSON.stringify({ role: "customer" }) });
+    const res = await api(null, "/api/payments/checkout", { method: "POST", body: plus() });
     check("1. Unauthenticated checkout is rejected (401)", res.status === 401, res.data);
   }
 
-  console.log("\n=== 2/3. Cannot purchase a plan for a role you don't hold ===");
+  console.log("\n=== 2/3. Only designers buy plans; customers use HRUNA for free ===");
   {
-    const customerTriesDesignerPlan = await api(aanya, "/api/payments/checkout", { method: "POST", body: JSON.stringify({ role: "designer" }) });
-    check("2. Customer (no designer profile) cannot buy the designer plan", customerTriesDesignerPlan.status === 403, customerTriesDesignerPlan.data);
+    const customerTriesDesignerPlan = await api(aanya, "/api/payments/checkout", { method: "POST", body: plus() });
+    check("2. Customer (no designer profile) cannot buy a designer plan", customerTriesDesignerPlan.status === 403, customerTriesDesignerPlan.data);
 
-    const designerTriesCustomerPlan = await api(meera, "/api/payments/checkout", { method: "POST", body: JSON.stringify({ role: "customer" }) });
-    check("3. Designer (no customer profile) cannot buy the customer plan", designerTriesCustomerPlan.status === 403, designerTriesCustomerPlan.data);
+    const customerPlan = await api(aanya, "/api/payments/checkout", { method: "POST", body: JSON.stringify({ role: "customer" }) });
+    check("3. There is no customer subscription to buy — customers are free (409 customer_free)", customerPlan.status === 409 && customerPlan.data.code === "customer_free", customerPlan.data);
   }
 
   console.log("\n=== 4. Invalid plan/role cannot be purchased ===");
   {
     const res = await api(aanya, "/api/payments/checkout", { method: "POST", body: JSON.stringify({ role: "not-a-real-role" }) });
     check("4. An invalid role value is rejected (400)", res.status === 400, res.data);
+    const free = await api(meera, "/api/payments/checkout", { method: "POST", body: JSON.stringify({ role: "designer", planKey: "designer_free" }) });
+    const bogus = await api(meera, "/api/payments/checkout", { method: "POST", body: JSON.stringify({ role: "designer", planKey: "designer_gold" }) });
+    const none = await api(meera, "/api/payments/checkout", { method: "POST", body: JSON.stringify({ role: "designer" }) });
+    check("   The Free plan, an unknown plan and a missing plan key can't be checked out (400)", free.status === 400 && bogus.status === 400 && none.status === 400, [free.status, bogus.status, none.status]);
   }
 
   console.log("\n=== 5. Payment-system-disabled state blocks real checkout ===");
@@ -135,7 +142,7 @@ async function main() {
     const settingsBefore = await api(admin, "/api/admin/subscriptions");
     check("   (sanity) payment_system_enabled starts false, as seeded", settingsBefore.data.settings?.paymentSystemEnabled === false, settingsBefore.data.settings);
 
-    const res = await api(aanya, "/api/payments/checkout", { method: "POST", body: JSON.stringify({ role: "customer" }) });
+    const res = await api(meera, "/api/payments/checkout", { method: "POST", body: plus() });
     check("5. Checkout is blocked while payments are disabled (409)", res.status === 409, res.data);
   }
 
@@ -143,11 +150,17 @@ async function main() {
   {
     const enable = await api(admin, "/api/admin/settings/payment", {
       method: "PATCH",
-      body: JSON.stringify({ paymentSystemEnabled: true, customerSubscriptionsEnabled: true }),
+      body: JSON.stringify({ paymentSystemEnabled: true, designerSubscriptionsEnabled: true }),
     });
-    check("   (setup) Admin enables payments + customer subscriptions", enable.status === 200, enable.data);
+    check("   (setup) Admin enables payments and designer subscriptions", enable.status === 200, enable.data);
+    const customerOn = await api(admin, "/api/admin/settings/payment", { method: "PATCH", body: JSON.stringify({ customerSubscriptionsEnabled: true }) });
+    check("   The admin can't switch customer subscriptions on (400) — customers are free", customerOn.status === 400, customerOn.data);
+    // Simulate the legacy flag still being on in an older database: customers must stay free.
+    sql("update public.payment_settings set customer_subscriptions_enabled = true;");
+    const legacyCustomer = await api(aanya, "/api/payments/checkout", { method: "POST", body: JSON.stringify({ role: "customer" }) });
+    check("   With the legacy customer flag on, customer checkout is still refused (409 customer_free)", legacyCustomer.status === 409 && legacyCustomer.data.code === "customer_free", legacyCustomer.data);
 
-    const res = await api(aanya, "/api/payments/checkout", { method: "POST", body: JSON.stringify({ role: "customer" }) });
+    const res = await api(meera, "/api/payments/checkout", { method: "POST", body: plus() });
     check(
       "6. Eligible checkout passes ALL app-level validation and only fails at the real Razorpay API call (502, safe generic message, no real order created — NOT a full pass; real TEST credentials are required to actually create a Razorpay order)",
       res.status === 502 && !/secret|key_secret|stack/i.test(JSON.stringify(res.data)),
@@ -160,7 +173,7 @@ async function main() {
     // Deliberately uses the SECOND fixture payment/order (not the one test 10/11 later activate
     // for real) — a rejected forged attempt correctly marks that row failed (see the verify
     // route), and this test must not consume the row test 10 needs to still be pending.
-    const forged = await api(aanya, "/api/payments/verify", {
+    const forged = await api(meera, "/api/payments/verify", {
       method: "POST",
       body: JSON.stringify({ razorpay_order_id: FIXTURE_ORDER_2, razorpay_payment_id: "pay_forged123", razorpay_signature: "0000not-a-real-signature" }),
     });
@@ -191,9 +204,9 @@ async function main() {
     check("    ...and marks the correct payment row succeeded", paymentStatus === "succeeded", { paymentStatus });
 
     const subCount = sql(
-      `select count(*) from public.user_subscriptions where user_id = 'c0000000-0000-0000-0000-000000000001' and role = 'customer' and status = 'active';`
+      `select count(*) from public.user_subscriptions s join public.subscription_plans p on p.id = s.plan_id where s.user_id = '${MEERA_USER}' and s.role = 'designer' and s.status = 'active' and p.plan_key = 'designer_plus' and not s.is_trial;`
     );
-    check("    ...and creates exactly one active subscription for the real user", subCount === "1", { subCount });
+    check("    ...and creates exactly one active Designer Plus subscription for the designer", subCount === "1", { subCount });
   }
 
   console.log("\n=== 11. Duplicate webhook delivery does not create duplicate records ===");
@@ -204,7 +217,7 @@ async function main() {
     check("11. A duplicate delivery of the same webhook is accepted (idempotent 200, not an error)", res.status === 200, res.data);
 
     const subCount = sql(
-      `select count(*) from public.user_subscriptions where user_id = 'c0000000-0000-0000-0000-000000000001' and role = 'customer' and status = 'active';`
+      `select count(*) from public.user_subscriptions where user_id = '${MEERA_USER}' and role = 'designer' and status = 'active';`
     );
     check("    ...still exactly one active subscription (no duplicate created)", subCount === "1", { subCount });
 
@@ -228,7 +241,7 @@ async function main() {
       try {
         // Explicit VALUES (not INSERT … SELECT), so exactly one row is attempted.
         sql(
-          `insert into public.payments (user_id, plan_id, amount, currency, status, payment_provider, provider_order_id) values ('c0000000-0000-0000-0000-000000000001', (select id from public.subscription_plans where role = 'customer'), 299, 'INR', 'pending', 'razorpay', '${FIXTURE_ORDER_1}');`
+          `insert into public.payments (user_id, plan_id, amount, currency, status, payment_provider, provider_order_id) values ('${MEERA_USER}', (select id from public.subscription_plans where plan_key = 'designer_plus'), 199, 'INR', 'pending', 'razorpay', '${FIXTURE_ORDER_1}');`
         );
       } catch {
         rejected = true;
@@ -240,17 +253,19 @@ async function main() {
   console.log("\n=== 13. Subscription dates/status are stored correctly ===");
   {
     const row = sql(
-      `select status, (end_date > now()) as not_yet_expired, (end_date - start_date < interval '32 days') as about_one_month from public.user_subscriptions where user_id = 'c0000000-0000-0000-0000-000000000001' and role = 'customer' and status = 'active';`
+      `select status, (end_date > now()) as not_yet_expired, (end_date - start_date < interval '32 days') as about_one_month from public.user_subscriptions where user_id = '${MEERA_USER}' and role = 'designer' and status = 'active';`
     );
     const [status, notExpired, aboutOneMonth] = row.split("|");
     check("13. Activated subscription has status=active, a future end_date, ~1 month duration", status === "active" && notExpired === "t" && aboutOneMonth === "t", { row });
   }
 
-  console.log("\n=== 14. SubscriptionGate responds to the real activated state ===");
+  console.log("\n=== 14. The paid plan takes effect; customers stay ungated ===");
   {
+    const plan = await api(meera, "/api/designer/plan");
+    check("14. The designer is now on Designer Plus, not a trial, until about a month from now", plan.status === 200 && plan.data.current?.planKey === "designer_plus" && plan.data.current?.isTrial === false && !!plan.data.current?.endsAt, plan.data.current);
     const home = await fetch(`${APP_URL}/home`, { headers: { cookie: aanya } });
     const homeText = await home.text();
-    check("14. Customer Home is NOT gated now that a real active subscription exists", home.status === 200 && !homeText.includes("SUBSCRIPTION REQUIRED"), { status: home.status });
+    check("    Customer Home is not gated even with customer subscriptions switched on and no subscription", home.status === 200 && !homeText.includes("SUBSCRIPTION REQUIRED"), { status: home.status });
   }
 
   console.log("\n=== 15/16. Admin monitoring — access + non-admin denial ===");
@@ -268,7 +283,7 @@ async function main() {
 
   console.log("\n=== Cleanup: cancel the fixture subscription, disable payments again ===");
   {
-    const cancel = await api(aanya, "/api/payments/cancel", { method: "POST", body: JSON.stringify({ role: "customer" }) });
+    const cancel = await api(meera, "/api/payments/cancel", { method: "POST", body: JSON.stringify({ role: "designer" }) });
     check("    (cleanup) Real cancel endpoint works on the fixture subscription", cancel.status === 200, cancel.data);
 
     const disable = await api(admin, "/api/admin/settings/payment", { method: "PATCH", body: JSON.stringify({ paymentSystemEnabled: false }) });

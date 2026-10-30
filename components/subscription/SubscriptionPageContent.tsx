@@ -19,7 +19,7 @@ declare global {
 
 const CHECKOUT_SCRIPT_SRC = "https://checkout.razorpay.com/v1/checkout.js";
 
-function loadRazorpayScript(): Promise<boolean> {
+export function loadRazorpayScript(): Promise<boolean> {
   return new Promise((resolve) => {
     if (window.Razorpay) return resolve(true);
     const existing = document.querySelector(`script[src="${CHECKOUT_SCRIPT_SRC}"]`);

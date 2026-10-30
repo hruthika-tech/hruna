@@ -12,6 +12,7 @@ import { NextResponse } from "next/server";
 import type { AuthError, PostgrestError, StorageApiError } from "@supabase/supabase-js";
 import { isProjectLockedDbError } from "@/lib/projects/progress-lock";
 import { projectLockedResponse } from "@/lib/projects/progress-lock-server";
+import { PLAN_LIMIT_CODE, isDuplicateProposalError, parsePlanLimitError, planLimitMessage } from "@/lib/subscriptions/plans";
 
 export class AppError extends Error {
   constructor(
@@ -112,6 +113,18 @@ export function errorResponse(error: unknown, context: string): NextResponse {
   // A write that reached a project whose completion the customer has approved — the database's
   // progress-history lock rejected it. Expected, not a failure: a clear 409 with a code.
   if (isProjectLockedDbError(error)) return projectLockedResponse();
+  // A designer plan limit enforced by the database (supabase/migrations/20261029000001_*): a clear
+  // 403 with the limit, never a generic 500. Also the always-on one-proposal-per-request rule.
+  const planLimit = parsePlanLimitError(error);
+  if (planLimit) {
+    return NextResponse.json(
+      { status: "error", code: PLAN_LIMIT_CODE, ...planLimit, message: planLimitMessage(planLimit.resource, planLimit.limit, planLimit.planKey) },
+      { status: 403 }
+    );
+  }
+  if (isDuplicateProposalError(error)) {
+    return NextResponse.json({ status: "error", code: "duplicate_proposal", message: "You've already sent a proposal for this request." }, { status: 409 });
+  }
   const appError = toAppError(error, context);
   // A real 429 from Supabase Auth (e.g. its email-send rate limit) is worth preserving as-is —
   // the client can tell "back off and retry" apart from a hard failure. Every other Auth/Postgrest/

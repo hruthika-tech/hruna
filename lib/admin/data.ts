@@ -147,6 +147,10 @@ export function mapAdminNotification(row: Tables<"admin_notifications">, created
 /* ------------------------------------------------------------------ */
 
 export function mapSubscriptionPlan(row: Tables<"subscription_plans">) {
+  // Designer-plan columns from migration 20261029000001 (absent before it's applied; not yet in
+  // the generated types). A row without a plan_key is a retired/legacy plan kept for history.
+  const extra = row as unknown as Record<string, unknown>;
+  const planKey = typeof extra.plan_key === "string" ? extra.plan_key : null;
   return {
     id: row.id,
     role: row.role,
@@ -159,6 +163,21 @@ export function mapSubscriptionPlan(row: Tables<"subscription_plans">) {
     isActive: row.is_active,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
+    planKey,
+    tierRank: typeof extra.tier_rank === "number" ? extra.tier_rank : null,
+    legacy: planKey === null,
+    limits: planKey
+      ? {
+          dresses: (extra.max_dresses as number | null) ?? null,
+          collections: (extra.max_collections as number | null) ?? null,
+          previous_creations: (extra.max_previous_creations as number | null) ?? null,
+          highlights: (extra.max_highlights as number | null) ?? null,
+          meet_entries: (extra.max_meet_entries as number | null) ?? null,
+          proposals_per_month: (extra.max_proposals_per_month as number | null) ?? null,
+          analytics_max_days: (extra.analytics_max_days as number | null) ?? null,
+          analytics_comparison: extra.analytics_comparison !== false,
+        }
+      : null,
   };
 }
 

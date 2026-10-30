@@ -195,6 +195,9 @@ export default function DesignerProfilePage() {
         <div className="flex-1 min-w-0">
           <h1 className="text-headline-md break-words">{profile.displayName || "Your name"}</h1>
           <p className="text-ink-variant text-sm break-all">{email}</p>
+          <Link href="/designer-subscription" className="text-sm text-primary hover:underline" data-testid="profile-plan-link">
+            Plan &amp; billing →
+          </Link>
         </div>
         {completedCount > 0 && (
           <div className="flex items-center gap-2 px-4 py-2 rounded-full bg-primary-container text-primary-on-container text-sm">

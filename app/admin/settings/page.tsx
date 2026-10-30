@@ -104,8 +104,8 @@ export default function AdminSettingsPage() {
             <section className="border border-white/10 rounded-md p-6 flex flex-col gap-4">
               <p className="text-sm font-medium">Platform settings</p>
               <div className="flex flex-col gap-2 text-sm text-white/70">
-                <div className="flex justify-between"><span className="text-white/40">Subscriptions enforced</span><span>{settings.paymentSystemEnabled ? "On" : "Off"}</span></div>
-                <div className="flex justify-between"><span className="text-white/40">Customer subscriptions</span><span>{settings.customerSubscriptionsEnabled ? "Enabled" : "Disabled"}</span></div>
+                <div className="flex justify-between"><span className="text-white/40">Paid designer plans</span><span>{settings.paymentSystemEnabled && settings.designerSubscriptionsEnabled ? "On" : "Off"}</span></div>
+                <div className="flex justify-between"><span className="text-white/40">Customers</span><span>Always free</span></div>
                 <div className="flex justify-between"><span className="text-white/40">Designer subscriptions</span><span>{settings.designerSubscriptionsEnabled ? "Enabled" : "Disabled"}</span></div>
                 <div className="flex justify-between"><span className="text-white/40">Platform currency</span><span>{settings.currency}</span></div>
               </div>
