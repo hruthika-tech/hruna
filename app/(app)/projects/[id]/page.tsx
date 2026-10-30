@@ -16,6 +16,8 @@ import { useToast } from "@/hooks/use-toast";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import type { DesignerSummary } from "@/lib/customer/data";
 import { isProgressLocked } from "@/lib/projects/progress-lock";
+import { ProjectWithdrawalPanel } from "@/components/projects/ProjectWithdrawalPanel";
+import { isProjectWithdrawable, type WithdrawalItem, type WithdrawalRole } from "@/lib/projects/withdrawal";
 
 interface ProjectDetail {
   id: string;
@@ -40,6 +42,8 @@ interface ProjectDetail {
   completedAt?: string;
   designer?: DesignerSummary;
   hasReview: boolean;
+  withdrawals: WithdrawalItem[];
+  viewerRole: WithdrawalRole | null;
 }
 
 interface ProgressUpdateItem {
@@ -70,6 +74,13 @@ export default function ProjectWorkspacePage() {
   const [reviewText, setReviewText] = useState("");
   const [reviewError, setReviewError] = useState("");
   const [submittingReview, setSubmittingReview] = useState(false);
+
+  // After a withdrawal request/answer: re-read the project (status + withdrawal history).
+  const reloadProject = async () => {
+    const res = await fetch(`/api/projects/${params.id}`);
+    const data = await res.json().catch(() => ({}));
+    if (res.ok) setProject(data.project);
+  };
 
   useEffect(() => {
     let cancelled = false;
@@ -270,6 +281,19 @@ export default function ProjectWorkspacePage() {
         </div>
       )}
 
+      {(isProjectWithdrawable(project.status) || project.status === "withdrawn" || project.withdrawals.length > 0) && (
+        <div className="mb-8">
+          <ProjectWithdrawalPanel
+            projectId={project.id}
+            projectStatus={project.status}
+            viewerRole={project.viewerRole}
+            withdrawals={project.withdrawals}
+            otherPartyName={designer?.studioName || designer?.name || "Your designer"}
+            onChanged={reloadProject}
+          />
+        </div>
+      )}
+
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-12">
         <div className="lg:col-span-2 flex flex-col gap-12">
           {/* Design details */}
@@ -342,7 +366,9 @@ export default function ProjectWorkspacePage() {
             {isProgressLocked(project.status) && (
               <p data-testid="progress-locked-note" className="flex items-start gap-2 text-xs text-ink-variant bg-surface-low rounded-md px-3 py-2.5 mb-6">
                 <Lock size={13} className="shrink-0 mt-0.5" aria-hidden="true" />
-                You approved this project's completion, so its progress history is final and can no longer be changed.
+                {project.status === "withdrawn"
+                  ? "This project was withdrawn, so its progress history is final and can no longer be changed."
+                  : "You approved this project's completion, so its progress history is final and can no longer be changed."}
               </p>
             )}
             <div className="flex flex-col gap-6">

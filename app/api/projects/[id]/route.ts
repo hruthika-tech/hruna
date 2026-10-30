@@ -12,12 +12,13 @@ import { createClient } from "@/lib/supabase/server";
 import { requireUser } from "@/lib/supabase/authorization";
 import { errorResponse } from "@/lib/supabase/errors";
 import { mapProject, resolveRequestImages, getDesignerSummaries, getCustomerSummaries } from "@/lib/designer/data";
+import { mapWithdrawal } from "@/lib/projects/withdrawal";
 
 export const dynamic = "force-dynamic";
 
 export async function GET(_request: Request, { params }: { params: { id: string } }) {
   try {
-    await requireUser();
+    const ctx = await requireUser();
     const supabase = createClient();
 
     const { data: project, error } = await supabase.from("projects").select("*").eq("id", params.id).maybeSingle();
@@ -36,14 +37,18 @@ export async function GET(_request: Request, { params }: { params: { id: string 
       throw new Error("Project is missing its request or proposal.");
     }
     const images = await resolveRequestImages(supabase, project.request_id);
-    const [designers, customers, { data: existingReview }] = await Promise.all([
+    const [designers, customers, { data: existingReview }, { data: withdrawals }] = await Promise.all([
       getDesignerSummaries(supabase, [project.designer_id]),
       getCustomerSummaries(supabase, [project.customer_id]),
       // reviews_select_public (RLS) makes this readable by anyone — used here only to tell the
       // customer-side workspace whether to show the "Leave a Review" form (one review per project,
       // enforced by the reviews table's own unique(project_id) constraint either way).
       supabase.from("reviews").select("id").eq("project_id", params.id).maybeSingle(),
+      // Mutual withdrawal history (project_withdrawals_select_participants RLS: participants/admin).
+      supabase.from("project_withdrawals").select("*").eq("project_id", params.id).order("created_at", { ascending: false }),
     ]);
+    // Which side of THIS project the viewer is (drives who may request vs. answer a withdrawal).
+    const viewerRole = ctx.customerId === project.customer_id ? "customer" : ctx.designerId === project.designer_id ? "designer" : null;
 
     return NextResponse.json({
       status: "ok",
@@ -52,6 +57,8 @@ export async function GET(_request: Request, { params }: { params: { id: string 
         designer: designers.get(project.designer_id),
         customer: customers.get(project.customer_id),
         hasReview: !!existingReview,
+        withdrawals: (withdrawals ?? []).map(mapWithdrawal),
+        viewerRole,
       },
     });
   } catch (err) {

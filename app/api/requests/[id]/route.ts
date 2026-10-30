@@ -7,8 +7,8 @@
 
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import { requireUser } from "@/lib/supabase/authorization";
-import { errorResponse } from "@/lib/supabase/errors";
+import { requireCustomer, requireUser } from "@/lib/supabase/authorization";
+import { errorResponse, isPostgrestError } from "@/lib/supabase/errors";
 import { mapRequest, resolveRequestImages } from "@/lib/customer/data";
 import { getCustomerSummaries } from "@/lib/designer/data";
 
@@ -41,5 +41,31 @@ export async function GET(_request: Request, { params }: { params: { id: string 
     });
   } catch (err) {
     return errorResponse(err, "api.requests.detail");
+  }
+}
+
+/**
+ * "Delete request" — the customer only, and only before a designer is chosen. Runs
+ * public.cancel_request() (migration 20261023000002): row-locked against a concurrent acceptance,
+ * closes the request as 'cancelled' and declines its pending proposals; nothing is physically
+ * deleted (a real DELETE would cascade away every designer's proposal). Designers get 403 from
+ * requireCustomer(); a customer who doesn't own the request gets "not found".
+ */
+export async function DELETE(_request: Request, { params }: { params: { id: string } }) {
+  try {
+    await requireCustomer();
+    const supabase = createClient();
+    const { error } = await supabase.rpc("cancel_request", { p_request_id: params.id });
+    if (error) {
+      // P0001 = cancel_request()'s own, user-facing refusals (not found / already deleted / has a designer).
+      if (isPostgrestError(error) && error.code === "P0001") {
+        const notFound = error.message === "Request not found";
+        return NextResponse.json({ status: "error", message: error.message }, { status: notFound ? 404 : 409 });
+      }
+      throw error;
+    }
+    return NextResponse.json({ status: "ok" });
+  } catch (err) {
+    return errorResponse(err, "api.requests.delete");
   }
 }

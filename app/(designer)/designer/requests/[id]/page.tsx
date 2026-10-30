@@ -12,7 +12,7 @@ import { Field, Input, Textarea } from "@/components/ui/Input";
 import { useToast } from "@/hooks/use-toast";
 import { formatCurrency, formatDate, cn } from "@/lib/utils";
 import type { CustomerSummary } from "@/lib/designer/data";
-import { isRequestOpenForProposals } from "@/lib/requests/lifecycle";
+import { isRequestDeleted, isRequestOpenForProposals } from "@/lib/requests/lifecycle";
 
 interface RequestDetail {
   id: string;
@@ -280,7 +280,9 @@ export default function DesignerRequestDetailPage() {
               <Button onClick={() => setProposalOpen(true)}>Send Proposal</Button>
             ) : (
               <p className="text-sm text-ink-variant bg-surface-low rounded px-3 py-2 text-center" data-testid="request-closed">
-                No longer accepting proposals — the customer has chosen a designer.
+                {isRequestDeleted(request.status)
+                  ? "The customer deleted this request — it's no longer accepting proposals."
+                  : "No longer accepting proposals — the customer has chosen a designer."}
               </p>
             )}
             <Button variant="secondary" onClick={handleMessage} disabled={messaging}>

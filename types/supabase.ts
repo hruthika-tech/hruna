@@ -1544,6 +1544,53 @@ export type Database = {
           },
         ]
       }
+      project_withdrawals: {
+        Row: {
+          created_at: string
+          id: string
+          project_id: string
+          reason: string
+          requested_by: string
+          requested_by_role: string
+          responded_at: string | null
+          responded_by: string | null
+          response_reason: string | null
+          status: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          project_id: string
+          reason: string
+          requested_by: string
+          requested_by_role: string
+          responded_at?: string | null
+          responded_by?: string | null
+          response_reason?: string | null
+          status?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          project_id?: string
+          reason?: string
+          requested_by?: string
+          requested_by_role?: string
+          responded_at?: string | null
+          responded_by?: string | null
+          response_reason?: string | null
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "project_withdrawals_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       projects: {
         Row: {
           changes_requested_at: string | null
@@ -2197,6 +2244,7 @@ export type Database = {
         Args: { p_customer_id: string; p_designer_id: string }
         Returns: boolean
       }
+      cancel_request: { Args: { p_request_id: string }; Returns: undefined }
       conversation_block_state: {
         Args: { p_conversation_id: string }
         Returns: string
@@ -2220,6 +2268,52 @@ export type Database = {
           blocked_id: string
           display_name: string
         }[]
+      }
+      project_progress_locked: {
+        Args: { p_project_id: string }
+        Returns: boolean
+      }
+      request_project_withdrawal: {
+        Args: { p_project_id: string; p_reason: string }
+        Returns: {
+          created_at: string
+          id: string
+          project_id: string
+          reason: string
+          requested_by: string
+          requested_by_role: string
+          responded_at: string | null
+          responded_by: string | null
+          response_reason: string | null
+          status: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "project_withdrawals"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      respond_project_withdrawal: {
+        Args: { p_approve: boolean; p_reason?: string; p_withdrawal_id: string }
+        Returns: {
+          created_at: string
+          id: string
+          project_id: string
+          reason: string
+          requested_by: string
+          requested_by_role: string
+          responded_at: string | null
+          responded_by: string | null
+          response_reason: string | null
+          status: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "project_withdrawals"
+          isOneToOne: true
+          isSetofReturn: false
+        }
       }
       start_identity_verification: { Args: never; Returns: undefined }
       submit_designer_profile_for_verification: {
@@ -2277,6 +2371,7 @@ export type Database = {
         | "awaiting_confirmation"
         | "completed"
         | "cancelled"
+        | "withdrawn"
       proposal_status: "pending" | "accepted" | "declined"
       request_status:
         | "draft"
@@ -2472,6 +2567,7 @@ export const Constants = {
         "awaiting_confirmation",
         "completed",
         "cancelled",
+        "withdrawn",
       ],
       proposal_status: ["pending", "accepted", "declined"],
       request_status: [

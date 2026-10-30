@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import Image from "next/image";
 import { useParams, useRouter } from "next/navigation";
-import { MapPin, Calendar, Wallet, Loader2 } from "lucide-react";
+import { MapPin, Calendar, Wallet, Loader2, Trash2 } from "lucide-react";
 import { StatusBadge } from "@/components/ui/Badge";
 import { Avatar } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
@@ -12,6 +12,7 @@ import { ImageLightbox, LightboxTrigger } from "@/components/ui/ImageLightbox";
 import { useToast } from "@/hooks/use-toast";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import type { DesignerSummary } from "@/lib/customer/data";
+import { isRequestDeletable, isRequestDeleted } from "@/lib/requests/lifecycle";
 
 interface RequestDetail {
   id: string;
@@ -55,6 +56,24 @@ export default function RequestDetailsPage() {
   const [decliningId, setDecliningId] = useState<string | null>(null);
   const [acceptingId, setAcceptingId] = useState<string | null>(null);
   const [messagingId, setMessagingId] = useState<string | null>(null);
+  // "Delete request" — only before a designer is chosen (cancel_request() enforces it server-side).
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+
+  const handleDelete = async () => {
+    setDeleting(true);
+    try {
+      const res = await fetch(`/api/requests/${params.id}`, { method: "DELETE" });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.message ?? "Couldn't delete this request.");
+      push("Request deleted.", "info");
+      router.push("/requests");
+    } catch (err) {
+      push(err instanceof Error ? err.message : "Couldn't delete this request.", "error");
+      setDeleting(false);
+      setDeleteOpen(false);
+    }
+  };
 
   const load = async () => {
     try {
@@ -129,14 +148,33 @@ export default function RequestDetailsPage() {
     );
   }
 
+  if (isRequestDeleted(request.status)) {
+    return (
+      <div className="container-editorial py-24 text-center" data-testid="request-deleted">
+        <p className="text-headline-sm mb-2">This request was deleted</p>
+        <p className="text-ink-variant text-sm mb-6">&ldquo;{request.title}&rdquo; is closed and no longer visible to designers.</p>
+        <Button variant="secondary" onClick={() => router.push("/requests")}>Back to my requests</Button>
+      </div>
+    );
+  }
+
+  const pendingCount = proposals.filter((p) => p.status === "pending").length;
+
   return (
     <div className="container-editorial py-12 pb-section-gap">
-      <div className="flex items-start justify-between mb-8">
-        <div>
+      <div className="flex flex-wrap items-start justify-between gap-4 mb-8">
+        <div className="min-w-0">
           <p className="text-label-md text-outline mb-2">FASHION REQUEST</p>
-          <h1 className="text-headline-md">{request.title}</h1>
+          <h1 className="text-headline-md break-words">{request.title}</h1>
         </div>
-        <StatusBadge status={request.status} />
+        <div className="flex flex-wrap items-center gap-3">
+          <StatusBadge status={request.status} />
+          {isRequestDeletable(request.status) && (
+            <Button size="sm" variant="secondary" onClick={() => setDeleteOpen(true)} data-testid="delete-request">
+              <Trash2 size={14} /> Delete Request
+            </Button>
+          )}
+        </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-12">
@@ -253,6 +291,25 @@ export default function RequestDetailsPage() {
           <div className="pt-3 border-t border-outline-variant text-xs text-outline">Submitted {formatDate(request.createdAt)}</div>
         </aside>
       </div>
+
+      <Modal open={deleteOpen} onClose={() => (deleting ? null : setDeleteOpen(false))} title="Delete this request?">
+        <div className="flex flex-col gap-5" data-testid="delete-request-dialog">
+          <p className="text-sm text-ink-variant">
+            &ldquo;{request.title}&rdquo; will be closed and removed from your requests and from designers&apos; Discover feed. Designers can&apos;t
+            send new proposals.
+            {pendingCount > 0
+              ? ` The ${pendingCount} pending proposal${pendingCount === 1 ? "" : "s"} will be declined and ${pendingCount === 1 ? "that designer is" : "those designers are"} notified.`
+              : ""}{" "}
+            This can&apos;t be undone.
+          </p>
+          <div className="flex gap-3">
+            <Button variant="secondary" className="flex-1" onClick={() => setDeleteOpen(false)} disabled={deleting}>Keep Request</Button>
+            <Button className="flex-1" onClick={handleDelete} disabled={deleting} data-testid="confirm-delete-request">
+              {deleting ? "Deleting…" : "Delete Request"}
+            </Button>
+          </div>
+        </div>
+      </Modal>
 
       <Modal open={!!decliningId} onClose={() => setDecliningId(null)} title="Decline this proposal?">
         <p className="text-sm text-ink-variant mb-6">

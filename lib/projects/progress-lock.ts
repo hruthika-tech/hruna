@@ -7,11 +7,12 @@
 
 export const PROJECT_LOCKED_CODE = "project_locked";
 export const PROJECT_LOCKED_MESSAGE =
-  "The customer has approved this project's completion, so its progress history is final and can no longer be changed.";
+  "This project has ended (completed or withdrawn), so its progress history is final and can no longer be changed.";
 
-/** The single rule: a project is locked once its completion has been approved (status "completed"). */
+/** The single rule: a project is locked once it has ended — completion approved by the customer
+ *  (status "completed") or a withdrawal agreed by both participants (status "withdrawn"). */
 export function isProgressLocked(status: string | null | undefined): boolean {
-  return status === "completed";
+  return status === "completed" || status === "withdrawn";
 }
 
 /** The error the database raises when a write hits a locked project (SQLSTATE 42501 + message prefix). */

@@ -2,11 +2,11 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { Bell, MessageSquare, CheckCircle2, Inbox, Star, ShieldCheck, Loader2 } from "lucide-react";
+import { Bell, MessageSquare, CheckCircle2, Inbox, Star, ShieldCheck, Loader2, LogOut } from "lucide-react";
 import { cn, timeAgo } from "@/lib/utils";
 import { saveNotificationRead } from "@/lib/badges/client";
 
-type NotificationType = "request" | "completion" | "review" | "verification";
+type NotificationType = "request" | "completion" | "review" | "verification" | "withdrawal";
 
 interface Notification {
   id: string;
@@ -17,7 +17,7 @@ interface Notification {
   read?: boolean;
 }
 
-const ICONS: Record<NotificationType, any> = { request: Inbox, completion: CheckCircle2, review: Star, verification: ShieldCheck };
+const ICONS: Record<NotificationType, any> = { request: Inbox, completion: CheckCircle2, review: Star, verification: ShieldCheck, withdrawal: LogOut };
 
 // Real data (Phase 9 fix) — same disconnection as the customer notifications page: a hardcoded
 // local array of fake events with broken mock-id links. Now reads a real, timestamp-sorted feed

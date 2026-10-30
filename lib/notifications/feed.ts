@@ -21,7 +21,7 @@ type Db = SupabaseClient<Database>;
 
 export interface NotificationItem {
   id: string;
-  type: "proposal" | "progress" | "completion" | "request" | "review" | "verification";
+  type: "proposal" | "progress" | "completion" | "request" | "review" | "verification" | "withdrawal";
   text: string;
   href: string;
   timestamp: string;
@@ -31,10 +31,46 @@ const FEED_SIZE = 12;
 const ms = (iso: string | null | undefined) => (iso ? Date.parse(iso) || 0 : 0);
 const newestFirst = (items: NotificationItem[]) => items.sort((a, b) => (a.timestamp < b.timestamp ? 1 : -1)).slice(0, FEED_SIZE);
 
+/**
+ * Withdrawal notifications for one participant (project_withdrawals, migration 20261023000002):
+ * the OTHER side asked to withdraw (please respond), and the other side's answer to MY request.
+ * Each key includes the state, so a new request or answer is a new notification.
+ */
+async function withdrawalItems(
+  supabase: Db,
+  viewer: "customer" | "designer",
+  projects: { id: string; request_id: string }[],
+  titleByRequestId: Map<string, string>,
+  otherName: (projectId: string) => string,
+  projectHref: (projectId: string) => string
+): Promise<NotificationItem[]> {
+  if (!projects.length) return [];
+  const { data } = await supabase
+    .from("project_withdrawals")
+    .select("id, project_id, requested_by_role, status, created_at, responded_at")
+    .in("project_id", projects.map((p) => p.id))
+    .order("created_at", { ascending: false })
+    .limit(10);
+  const requestIdByProject = new Map(projects.map((p) => [p.id, p.request_id]));
+  const items: NotificationItem[] = [];
+  for (const w of data ?? []) {
+    const title = titleByRequestId.get(requestIdByProject.get(w.project_id) ?? "") ?? "your project";
+    const href = projectHref(w.project_id);
+    if (w.status === "pending" && w.requested_by_role !== viewer) {
+      items.push({ id: `withdrawal-${w.id}-pending`, type: "withdrawal", text: `${otherName(w.project_id)} asked to withdraw from "${title}". Please review the request on the project page.`, href, timestamp: w.created_at });
+    } else if ((w.status === "approved" || w.status === "rejected") && w.requested_by_role === viewer && w.responded_at) {
+      const verb = w.status === "approved" ? `approved your withdrawal request — "${title}" is now withdrawn` : `declined your withdrawal request for "${title}" — the project continues`;
+      items.push({ id: `withdrawal-${w.id}-${w.status}`, type: "withdrawal", text: `${otherName(w.project_id)} ${verb}.`, href, timestamp: w.responded_at });
+    }
+  }
+  return items;
+}
+
 /** The signed-in customer's feed (proposals, project progress, completion requests — not chat messages). */
 export async function customerFeed(supabase: Db, ctx: { customerId: string }): Promise<NotificationItem[]> {
-  const { data: myRequests } = await supabase.from("fashion_requests").select("id, title").eq("customer_id", ctx.customerId);
-  const requestIds = (myRequests ?? []).map((r) => r.id);
+  const { data: myRequests } = await supabase.from("fashion_requests").select("id, title, status").eq("customer_id", ctx.customerId);
+  // Proposals on a request the customer deleted (closed as 'cancelled') are no longer news.
+  const requestIds = (myRequests ?? []).filter((r) => r.status !== "cancelled").map((r) => r.id);
   const requestTitleById = new Map((myRequests ?? []).map((r) => [r.id, r.title]));
 
   const { data: myProjects } = await supabase.from("projects").select("id, request_id, designer_id, status, updated_at").eq("customer_id", ctx.customerId);
@@ -72,6 +108,16 @@ export async function customerFeed(supabase: Db, ctx: { customerId: string }): P
     // Keyed by the moment it entered this state, so a project marked complete again later is new again.
     items.push({ id: `completion-${p.id}-${ms(p.updated_at)}`, type: "completion", text: `${name} marked "${title}" as completed. Please confirm.`, href: `/projects/${p.id}`, timestamp: p.updated_at });
   }
+  items.push(
+    ...(await withdrawalItems(
+      supabase,
+      "customer",
+      myProjects ?? [],
+      requestTitleById,
+      (projectId) => designers.get(projectById.get(projectId)?.designer_id ?? "")?.name ?? "Your designer",
+      (projectId) => `/projects/${projectId}`
+    ))
+  );
   return newestFirst(items);
 }
 
@@ -111,6 +157,36 @@ export async function designerFeed(supabase: Db, ctx: { designerId: string }): P
   for (const r of recentReviews ?? []) {
     items.push({ id: `review-${r.id}`, type: "review", text: `You received a new ${r.rating}-star review.`, href: "/designer/reviews", timestamp: r.created_at });
   }
+  // Requests this designer proposed on that the customer then deleted (closed as 'cancelled').
+  const { data: declined } = await supabase
+    .from("proposals")
+    .select("id, request_id, updated_at")
+    .eq("designer_id", ctx.designerId)
+    .eq("status", "declined")
+    .order("updated_at", { ascending: false })
+    .limit(10);
+  // Withdrawals on any of this designer's projects (not only completed ones).
+  const { data: allProjects } = await supabase.from("projects").select("id, request_id").eq("designer_id", ctx.designerId);
+  const titleRequestIds = [...new Set([...(declined ?? []).map((p) => p.request_id), ...(allProjects ?? []).map((p) => p.request_id)])];
+  const { data: titled } = titleRequestIds.length
+    ? await supabase.from("fashion_requests").select("id, title, status").in("id", titleRequestIds)
+    : { data: [] as { id: string; title: string; status: string }[] };
+  const requestById = new Map((titled ?? []).map((r) => [r.id, r]));
+  for (const p of declined ?? []) {
+    const request = requestById.get(p.request_id);
+    if (request?.status !== "cancelled" || (allProjects ?? []).some((pr) => pr.request_id === p.request_id)) continue;
+    items.push({ id: `request-deleted-${p.id}`, type: "request", text: `The customer deleted "${request.title}" — your proposal is no longer active.`, href: `/designer/requests/${p.request_id}`, timestamp: p.updated_at });
+  }
+  items.push(
+    ...(await withdrawalItems(
+      supabase,
+      "designer",
+      allProjects ?? [],
+      new Map((titled ?? []).map((r) => [r.id, r.title])),
+      () => "The customer",
+      (projectId) => `/designer/projects/${projectId}`
+    ))
+  );
   if (verification?.reviewed_at && (verification.overall_status === "approved" || verification.overall_status === "rejected")) {
     const text = verification.overall_status === "approved" ? "Your studio verification was approved." : "Your studio verification was not approved.";
     // Keyed by outcome + review time, so a later re-review is a new notification.

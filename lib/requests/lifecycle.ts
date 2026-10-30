@@ -14,3 +14,14 @@ export function isRequestOpenForProposals(status: string | null | undefined): bo
 }
 
 export const REQUEST_CLOSED_MESSAGE = "This request is no longer accepting proposals — the customer has already chosen a designer.";
+
+// "Delete request" (cancel_request()): only before a designer is chosen — no accepted proposal, no
+// project. Afterwards the project's mutual withdrawal workflow applies instead. A deleted request
+// is closed as 'cancelled' (kept for history) and hidden from the customer's lists and Discover.
+export const DELETABLE_REQUEST_STATUSES = ["draft", "submitted", "reviewed", "proposal_received"] as const;
+
+export function isRequestDeletable(status: string | null | undefined): boolean {
+  return (DELETABLE_REQUEST_STATUSES as readonly string[]).includes(status ?? "");
+}
+
+export const isRequestDeleted = (status: string | null | undefined) => status === "cancelled";

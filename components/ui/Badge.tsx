@@ -82,6 +82,7 @@ const statusTone: Record<string, { tone: any; label: string }> = {
   cancelled: { tone: "neutral", label: "Cancelled" },
   none: { tone: "neutral", label: "No Subscription" },
   completed: { tone: "success", label: "Completed" },
+  withdrawn: { tone: "neutral", label: "Withdrawn" },
   // Payment transaction statuses (PaymentRecordStatus)
   succeeded: { tone: "success", label: "Successful" },
   pending: { tone: "warning", label: "Pending" },

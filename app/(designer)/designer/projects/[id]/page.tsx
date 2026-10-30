@@ -17,6 +17,8 @@ import { formatCurrency, formatDate } from "@/lib/utils";
 import type { UploadedImage } from "@/lib/customer/upload-client";
 import type { CustomerSummary } from "@/lib/designer/data";
 import { isProgressLocked } from "@/lib/projects/progress-lock";
+import { ProjectWithdrawalPanel } from "@/components/projects/ProjectWithdrawalPanel";
+import { isProjectWithdrawable, type WithdrawalItem, type WithdrawalRole } from "@/lib/projects/withdrawal";
 
 interface ProjectDetail {
   id: string;
@@ -40,6 +42,8 @@ interface ProjectDetail {
   status: string;
   completedAt?: string;
   customer?: CustomerSummary;
+  withdrawals: WithdrawalItem[];
+  viewerRole: WithdrawalRole | null;
 }
 
 interface ProgressUpdateItem {
@@ -270,6 +274,19 @@ export default function DesignerProjectWorkspacePage() {
         </div>
       )}
 
+      {(isProjectWithdrawable(project.status) || project.status === "withdrawn" || project.withdrawals.length > 0) && (
+        <div className="mb-8">
+          <ProjectWithdrawalPanel
+            projectId={project.id}
+            projectStatus={project.status}
+            viewerRole={project.viewerRole}
+            withdrawals={project.withdrawals}
+            otherPartyName={customer?.name || "The customer"}
+            onChanged={load}
+          />
+        </div>
+      )}
+
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-12">
         <div className="lg:col-span-2 flex flex-col gap-12">
           <section>
@@ -328,7 +345,9 @@ export default function DesignerProjectWorkspacePage() {
             {progressLocked && (
               <p data-testid="progress-locked-note" className="flex items-start gap-2 text-xs text-ink-variant bg-surface-low rounded-md px-3 py-2.5 mb-6">
                 <Lock size={13} className="shrink-0 mt-0.5" aria-hidden="true" />
-                The customer approved this project's completion, so its progress history is final — updates can no longer be added, edited or deleted.
+                {project.status === "withdrawn"
+                  ? "This project was withdrawn by mutual agreement, so its progress history is final — updates can no longer be added, edited or deleted."
+                  : "The customer approved this project's completion, so its progress history is final — updates can no longer be added, edited or deleted."}
               </p>
             )}
             <div className="flex flex-col gap-6">

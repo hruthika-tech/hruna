@@ -2,12 +2,12 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { Bell, CheckCircle2, Sparkles, Loader2 } from "lucide-react";
+import { Bell, CheckCircle2, Sparkles, Loader2, LogOut } from "lucide-react";
 import { cn, timeAgo } from "@/lib/utils";
 import { saveNotificationRead } from "@/lib/badges/client";
 
 // Chat messages are not notifications — they're counted by the Messages icon (lib/notifications/feed.ts).
-type NotificationType = "proposal" | "completion" | "progress";
+type NotificationType = "proposal" | "completion" | "progress" | "withdrawal";
 
 interface Notification {
   id: string;
@@ -22,6 +22,7 @@ const ICONS: Record<NotificationType, any> = {
   proposal: Sparkles,
   completion: CheckCircle2,
   progress: Bell,
+  withdrawal: LogOut,
 };
 
 // Real data (Phase 9 fix) — this page used to render a hardcoded local array of fake events

@@ -24,6 +24,8 @@ export async function GET() {
       .from("fashion_requests")
       .select("*")
       .eq("customer_id", ctx.customerId)
+      // Deleted requests (closed as 'cancelled' by cancel_request) are kept for history, not listed.
+      .neq("status", "cancelled")
       .order("created_at", { ascending: false });
     if (error) throw error;
 
