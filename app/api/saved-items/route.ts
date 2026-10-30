@@ -12,6 +12,7 @@ import { isAdminOwnedDesigner, requireCustomer } from "@/lib/supabase/authorizat
 import { errorResponse } from "@/lib/supabase/errors";
 import { mapSavedItem } from "@/lib/customer/data";
 import type { TablesInsert } from "@/lib/supabase/types";
+import { recordSave } from "@/lib/analytics/tracking";
 
 export const dynamic = "force-dynamic";
 
@@ -58,7 +59,9 @@ export async function POST(request: Request) {
     const supabase = createClient();
 
     // Designers, dresses and collections belonging to an admin-owned designer profile aren't
-    // public, so they can't be saved either.
+    // public, so they can't be saved either. The owning designer is also what a save is credited
+    // to in that designer's analytics.
+    let ownerDesignerId: string | null = null;
     if (itemType === "designer" || itemType === "dress" || itemType === "collection") {
       let designerId: string | null = itemId;
       if (itemType !== "designer") {
@@ -68,6 +71,7 @@ export async function POST(request: Request) {
       if (designerId && (await isAdminOwnedDesigner(designerId))) {
         return NextResponse.json({ status: "error", message: "Item not found." }, { status: 404 });
       }
+      ownerDesignerId = designerId;
     }
 
     const { data: existing, error: findError } = await supabase
@@ -92,6 +96,13 @@ export async function POST(request: Request) {
     };
     const { error: insertError } = await supabase.from("customer_saved_items").insert(insert);
     if (insertError) throw insertError;
+
+    // Credit the save to the item's designer (lib/analytics/tracking.ts). Never allowed to fail the save.
+    if (ownerDesignerId && itemType !== "project") {
+      await recordSave({ ctx, itemType, itemId, designerId: ownerDesignerId }).catch((err) =>
+        console.error("[analytics] save not recorded", err instanceof Error ? err.message : err)
+      );
+    }
 
     return NextResponse.json({ status: "ok", saved: true });
   } catch (err) {

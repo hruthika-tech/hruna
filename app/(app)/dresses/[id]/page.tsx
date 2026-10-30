@@ -7,6 +7,7 @@ import { NOINDEX_FOLLOW, pageMetadata, truncateDescription } from "@/lib/seo";
 import { formatCurrency } from "@/lib/utils";
 import type { Dress } from "@/types";
 import { DressDetailsView } from "./DressDetailsView";
+import { TrackView } from "@/components/analytics/TrackView";
 
 // Server-rendered: the dress loads here, through the same getDressDetail() as /api/dresses/[id]
 // (same anonymous-readable data, same rules), so search engines get the real content, a missing
@@ -42,5 +43,11 @@ export default async function DressDetailsPage({ params }: { params: { id: strin
   if (!result) notFound();
   // Only what the page displays goes to the browser: no storage file ids, no extra designer fields.
   const { imageFiles: _fileIds, ...dress } = result.dress;
-  return <DressDetailsView dress={dress satisfies Dress} designer={toPublicDesignerSummary(result.designer)} />;
+  return (
+    <>
+      {/* Counts this visit for the designer's analytics (the server skips the owner's own views). */}
+      <TrackView type="dress" id={dress.id} />
+      <DressDetailsView dress={dress satisfies Dress} designer={toPublicDesignerSummary(result.designer)} />
+    </>
+  );
 }

@@ -15,6 +15,7 @@ const navLinks = [
   { href: "/designer/requests", label: "Requests" },
   { href: "/designer/projects", label: "Projects" },
   { href: "/designer/studio", label: "My Studio" },
+  { href: "/designer/analytics", label: "Analytics" },
 ];
 
 // name/avatar are the signed-in designer's real identity (Phase 7 fix — this used to always show
@@ -116,6 +117,7 @@ export function DesignerNavbar({ name, avatar }: { name: string; avatar: string 
           {[
             ...navLinks,
             { href: "/designer/reviews", label: "Reviews" },
+            { href: "/designer-subscription", label: "Plan & billing" },
             { href: "/designer/messages", label: "Messages", count: unread.messages },
             { href: "/designer/notifications", label: "Notifications", count: unread.notifications },
             { href: "/designer/profile", label: "Profile & Settings" },

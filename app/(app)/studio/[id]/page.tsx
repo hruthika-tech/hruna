@@ -15,6 +15,7 @@ import { createClient } from "@/lib/supabase/server";
 import { getStudioBundle } from "@/lib/designer/studio-bundle";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import { DressAvailabilityNote } from "@/components/dresses/DressAvailabilityNote";
+import { TrackView } from "@/components/analytics/TrackView";
 
 // Real data (Phase 5) — designer_profiles + studio content, via the same lib/designer/
 // studio-bundle.ts bundle the designer's own "My Studio" preview and app/api/studio/[id] use.
@@ -55,6 +56,8 @@ export default async function PublicStudioPage({ params }: { params: { id: strin
 
   return (
     <div className="pb-section-gap">
+      {/* Counts this visit for the designer's analytics (the server skips the owner's own views). */}
+      <TrackView type="studio" id={designer.id} />
       {/* Banner */}
       <div className="relative h-72 md:h-96 w-full">
         {designer.banner && <Image src={designer.banner} alt={designer.studioName} fill priority className="object-cover" />}
