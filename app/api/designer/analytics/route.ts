@@ -13,6 +13,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/server";
 import { requireDesigner } from "@/lib/supabase/authorization";
 import { errorResponse } from "@/lib/supabase/errors";
+import { isMissingSchemaObject } from "@/lib/supabase/schema-readiness";
 import { getAnalyticsEntitlement } from "@/lib/analytics/plans";
 import { getMyEntitlements, planLimitResponse } from "@/lib/subscriptions/designer-plans";
 import { isRangeDays, resolveRange } from "@/lib/analytics/ranges";
@@ -42,7 +43,16 @@ export async function GET(request: Request) {
     // Untyped until types/supabase.ts is regenerated with designer_analytics().
     const supabase = createClient() as unknown as SupabaseClient;
     const { data, error } = await supabase.rpc("designer_analytics", { p_start: range.start, p_end: range.end });
-    if (error) throw error;
+    if (error) {
+      // Database without the analytics migrations yet: a clear "not ready" answer, not a failure.
+      if (isMissingSchemaObject(error)) {
+        return NextResponse.json(
+          { status: "error", code: "analytics_not_ready", message: "Studio analytics are being set up and will appear here soon." },
+          { status: 503 }
+        );
+      }
+      throw error;
+    }
 
     return NextResponse.json({ status: "ok", analytics: buildAnalyticsView(data as RawAnalytics, entitlement) });
   } catch (err) {

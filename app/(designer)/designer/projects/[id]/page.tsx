@@ -43,6 +43,8 @@ interface ProjectDetail {
   completedAt?: string;
   customer?: CustomerSummary;
   withdrawals: WithdrawalItem[];
+  /** false until the withdrawal migration is on this database (then the panel is hidden). */
+  withdrawalsAvailable?: boolean;
   viewerRole: WithdrawalRole | null;
 }
 
@@ -274,7 +276,7 @@ export default function DesignerProjectWorkspacePage() {
         </div>
       )}
 
-      {(isProjectWithdrawable(project.status) || project.status === "withdrawn" || project.withdrawals.length > 0) && (
+      {project.withdrawalsAvailable !== false && (isProjectWithdrawable(project.status) || project.status === "withdrawn" || project.withdrawals.length > 0) && (
         <div className="mb-8">
           <ProjectWithdrawalPanel
             projectId={project.id}

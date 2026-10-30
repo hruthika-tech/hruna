@@ -11,6 +11,7 @@ import { requireCustomer, requireUser } from "@/lib/supabase/authorization";
 import { errorResponse, isPostgrestError } from "@/lib/supabase/errors";
 import { mapRequest, resolveRequestImages } from "@/lib/customer/data";
 import { getCustomerSummaries } from "@/lib/designer/data";
+import { isMissingSchemaObject } from "@/lib/supabase/schema-readiness";
 
 export const dynamic = "force-dynamic";
 
@@ -57,6 +58,13 @@ export async function DELETE(_request: Request, { params }: { params: { id: stri
     const supabase = createClient();
     const { error } = await supabase.rpc("cancel_request", { p_request_id: params.id });
     if (error) {
+      // Database without the request-deletion migration yet: say so clearly; nothing changed.
+      if (isMissingSchemaObject(error)) {
+        return NextResponse.json(
+          { status: "error", code: "request_deletion_not_ready", message: "Deleting a request isn't available yet. Please try again later." },
+          { status: 503 }
+        );
+      }
       // P0001 = cancel_request()'s own, user-facing refusals (not found / already deleted / has a designer).
       if (isPostgrestError(error) && error.code === "P0001") {
         const notFound = error.message === "Request not found";

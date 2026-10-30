@@ -13,6 +13,7 @@ import { requireUser } from "@/lib/supabase/authorization";
 import { errorResponse } from "@/lib/supabase/errors";
 import { mapProject, resolveRequestImages, getDesignerSummaries, getCustomerSummaries } from "@/lib/designer/data";
 import { mapWithdrawal } from "@/lib/projects/withdrawal";
+import { isMissingSchemaObject } from "@/lib/supabase/schema-readiness";
 
 export const dynamic = "force-dynamic";
 
@@ -37,7 +38,7 @@ export async function GET(_request: Request, { params }: { params: { id: string 
       throw new Error("Project is missing its request or proposal.");
     }
     const images = await resolveRequestImages(supabase, project.request_id);
-    const [designers, customers, { data: existingReview }, { data: withdrawals }] = await Promise.all([
+    const [designers, customers, { data: existingReview }, { data: withdrawals, error: withdrawalsError }] = await Promise.all([
       getDesignerSummaries(supabase, [project.designer_id]),
       getCustomerSummaries(supabase, [project.customer_id]),
       // reviews_select_public (RLS) makes this readable by anyone — used here only to tell the
@@ -58,6 +59,8 @@ export async function GET(_request: Request, { params }: { params: { id: string 
         customer: customers.get(project.customer_id),
         hasReview: !!existingReview,
         withdrawals: (withdrawals ?? []).map(mapWithdrawal),
+        // false on a database without the withdrawal migration yet — the page then hides the panel.
+        withdrawalsAvailable: !isMissingSchemaObject(withdrawalsError),
         viewerRole,
       },
     });

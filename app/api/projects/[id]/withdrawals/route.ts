@@ -11,6 +11,7 @@ import { createClient } from "@/lib/supabase/server";
 import { requireUser } from "@/lib/supabase/authorization";
 import { errorResponse, isPostgrestError } from "@/lib/supabase/errors";
 import { mapWithdrawal, validateWithdrawalReason } from "@/lib/projects/withdrawal";
+import { isMissingSchemaObject } from "@/lib/supabase/schema-readiness";
 
 export const dynamic = "force-dynamic";
 
@@ -24,6 +25,12 @@ export async function POST(request: Request, { params }: { params: { id: string 
     const supabase = createClient();
     const { data, error } = await supabase.rpc("request_project_withdrawal", { p_project_id: params.id, p_reason: reason.value });
     if (error) {
+      if (isMissingSchemaObject(error)) {
+        return NextResponse.json(
+          { status: "error", code: "withdrawals_not_ready", message: "Withdrawing from a project isn't available yet. Please try again later." },
+          { status: 503 }
+        );
+      }
       // Two requests at the same instant: the one-pending-per-project unique index refused the second.
       if (isPostgrestError(error) && error.code === "23505") {
         return NextResponse.json({ status: "error", message: "A withdrawal request is already waiting for a response on this project." }, { status: 409 });

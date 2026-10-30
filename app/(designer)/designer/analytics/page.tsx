@@ -20,7 +20,7 @@ export default function DesignerAnalyticsPage() {
   const [range, setRange] = useState<RangeDays | null>(null);
   const adoptDefault = useRef(false);
   const [view, setView] = useState<AnalyticsView | null>(null);
-  const [status, setStatus] = useState<"loading" | "error" | "ready">("loading");
+  const [status, setStatus] = useState<"loading" | "error" | "ready" | "not_ready">("loading");
   const [error, setError] = useState("");
   const request = useRef(0);
 
@@ -32,6 +32,12 @@ export default function DesignerAnalyticsPage() {
       const res = await fetch(days === null ? "/api/designer/analytics" : `/api/designer/analytics?range=${days}`);
       const data = await res.json();
       if (id !== request.current) return; // a newer range was chosen meanwhile
+      if (res.status === 503 && data.code === "analytics_not_ready") {
+        // Analytics isn't set up on this database yet: a calm notice, not an error.
+        setError(data.message);
+        setStatus("not_ready");
+        return;
+      }
       if (!res.ok) throw new Error(data.message ?? "Couldn't load your analytics.");
       setView(data.analytics);
       setStatus("ready");
@@ -145,6 +151,13 @@ export default function DesignerAnalyticsPage() {
       {status === "loading" && !view && (
         <div className="flex items-center justify-center gap-2 text-[#0A3323]/70 py-24" role="status">
           <Loader2 className="animate-spin" size={18} aria-hidden /> Loading your analytics…
+        </div>
+      )}
+
+      {status === "not_ready" && (
+        <div className="text-center py-16 bg-white border border-[#839958]/30 rounded-md px-6" role="status" data-testid="analytics-not-ready">
+          <p className="text-headline-sm text-[#0A3323] mb-2">Studio analytics are on their way</p>
+          <p className="text-[#0A3323]/70 text-sm">{error}</p>
         </div>
       )}
 

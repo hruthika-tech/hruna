@@ -14,6 +14,7 @@ import { cookies } from "next/headers";
 import { getAuthContext } from "@/lib/supabase/authorization";
 import { clientIp, isLikelyNonHuman, newVisitorId, recordView, VISITOR_COOKIE, VISITOR_COOKIE_MAX_AGE } from "@/lib/analytics/tracking";
 import { isUuid } from "@/lib/moderation/reports";
+import { isMissingSchemaObject } from "@/lib/supabase/schema-readiness";
 
 export const dynamic = "force-dynamic";
 
@@ -45,8 +46,9 @@ export async function POST(request: Request) {
     const viewer = await getAuthContext();
     await recordView({ kind: type, id, viewer, cookieId, ip: clientIp(request.headers) });
   } catch (err) {
-    // Analytics must never break a page: log and move on.
-    console.error("[analytics] view not recorded", err instanceof Error ? err.message : err);
+    // Analytics must never break a page: log and move on (quietly while the analytics migrations
+    // aren't on this database yet — every view would otherwise log the same error).
+    if (!isMissingSchemaObject(err)) console.error("[analytics] view not recorded", err instanceof Error ? err.message : err);
   }
 
   const response = noContent();

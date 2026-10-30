@@ -13,6 +13,7 @@ import { errorResponse } from "@/lib/supabase/errors";
 import { mapSavedItem } from "@/lib/customer/data";
 import type { TablesInsert } from "@/lib/supabase/types";
 import { recordSave } from "@/lib/analytics/tracking";
+import { isMissingSchemaObject } from "@/lib/supabase/schema-readiness";
 
 export const dynamic = "force-dynamic";
 
@@ -99,9 +100,9 @@ export async function POST(request: Request) {
 
     // Credit the save to the item's designer (lib/analytics/tracking.ts). Never allowed to fail the save.
     if (ownerDesignerId && itemType !== "project") {
-      await recordSave({ ctx, itemType, itemId, designerId: ownerDesignerId }).catch((err) =>
-        console.error("[analytics] save not recorded", err instanceof Error ? err.message : err)
-      );
+      await recordSave({ ctx, itemType, itemId, designerId: ownerDesignerId }).catch((err) => {
+        if (!isMissingSchemaObject(err)) console.error("[analytics] save not recorded", err instanceof Error ? err.message : err);
+      });
     }
 
     return NextResponse.json({ status: "ok", saved: true });
