@@ -220,6 +220,7 @@ async function main() {
     const html = await (await fetch(`${APP_URL}/create-account`, { headers: { cookie: adminCookie } })).text();
     const formFields = ['id="name"', 'id="email"', 'id="password"', 'id="confirmPassword"', 'type="submit"', "Create your account"];
     check("9a. ...and it shows the normal registration form", formFields.every((f) => html.includes(f)), formFields.filter((f) => !html.includes(f)).join(", "));
+    check("9a. ...and ONLY the form: no signed-in notice above it", !html.includes('data-testid="admin-registering"') && !html.includes("signed in as") && !html.includes("admin@lilirve.dev"));
     const login = await pageStatus("/login", adminCookie);
     check("9b. GET /login as a signed-in admin -> 200 (form shown, no redirect)", login.status === 200, `got ${login.status} ${login.location}`);
 

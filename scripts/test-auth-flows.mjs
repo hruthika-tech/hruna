@@ -107,7 +107,10 @@ async function mailFor(to, subject, since) {
 /** The link Supabase's DEFAULT template would send for the same token: <auth>/verify → redirect_to?code=… */
 const defaultTemplateLink = (tokenHash, type, redirectTo) =>
   `${SUPABASE_URL}/auth/v1/verify?token=${tokenHash}&type=${type}&redirect_to=${encodeURIComponent(redirectTo)}`;
-const SUBJECT = { signup: "Confirm your HRUNA account", recovery: "Reset your HRUNA password", emailChange: "email change" };
+// The signed-in notice that /create-account no longer shows (as server HTML, and as visible text).
+const NOTICE_MARKERS = ['data-testid="signed-in-registering"', 'data-testid="admin-registering"', 'data-testid="signout-create"', "signed in as", "Back to my account", "Sign out instead"];
+const NOTICE_TEXT = ["signed in as", "Back to my account", "Sign out instead", "different email"];
+const SUBJECT = { signup:"Confirm your HRUNA account", recovery: "Reset your HRUNA password", emailChange: "email change" };
 
 /** Registers + confirms a fresh account (token_hash link, its own browser); returns { email, cookie }. */
 async function freshAccount(tag) {
@@ -564,9 +567,9 @@ async function main() {
     const designerBefore = await session(designerCookie);
     check("8. (setup) a designer is signed in", designerBefore.hasDesignerProfile && !designerBefore.hasCustomerProfile && designerBefore.email === DESIGNER, designerBefore);
 
-    // Up front: /create-account explains the account switch instead of silently showing the form.
+    // /create-account shows ONLY the registration form — no signed-in notice, and no forced sign-out.
     const createHtml = await (await fetch(`${APP_URL}/create-account`, { headers: { cookie: designerCookie } })).text();
-    check("8a. /create-account while signed in as the designer → the registration form, with a note naming the signed-in designer (no forced sign-out)", createHtml.includes('data-testid="signed-in-registering"') && createHtml.includes(DESIGNER) && createHtml.includes("(designer)") && createHtml.includes('id="name"'));
+    check("8a. /create-account while signed in as the designer → only the registration form (no signed-in notice, no forced sign-out)", createHtml.includes('id="name"') && !NOTICE_MARKERS.some((m) => createHtml.includes(m)) && (await session(designerCookie)).userId === designerBefore.userId, NOTICE_MARKERS.filter((m) => createHtml.includes(m)));
     const anonCreate = await (await fetch(`${APP_URL}/create-account`)).text();
     check("8b. /create-account signed out → the normal registration form", anonCreate.includes('id="name"') && !anonCreate.includes('data-testid="account-switch"'));
 
@@ -658,12 +661,14 @@ async function main() {
       // The whole thing in a real browser, through the UI.
       const { context, page: p } = await page(merge("", (await login(DESIGNER, seedPassword())).res));
       await p.goto(`${APP_URL}/create-account`, { waitUntil: "networkidle" });
-      const notice = (await p.locator('[data-testid="signed-in-registering"]').count()) === 1 && (await p.locator("#name").count()) === 1;
-      await p.click('[data-testid="signout-create"]');
-      await p.waitForSelector('[data-testid="signed-in-registering"]', { state: "detached", timeout: 20000 }).catch(() => undefined);
-      await p.waitForLoadState("networkidle"); // let the fresh page hydrate before typing into it
-      const formShown = (await p.locator("#name").count()) === 1 && (await p.locator('[data-testid="signed-in-registering"]').count()) === 0;
-      check("8u. Browser: designer opens Create account → form + signed-in note → optional 'Sign out instead' → plain empty form", notice && formShown);
+      const text = await p.locator("main, body").first().innerText();
+      const onlyForm = (await p.locator("#name").count()) === 1 && (await p.locator('[role="status"]').count()) === 0 && !NOTICE_TEXT.some((t) => text.includes(t)) && !text.includes(DESIGNER);
+      const stillDesigner = await p.evaluate(async () => (await (await fetch("/api/auth/session")).json()).email);
+      // This scenario continues in a signed-out browser: sign out the normal way (this browser only).
+      await p.evaluate(() => fetch("/api/auth/logout", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ scope: "local" }) }));
+      await p.goto(`${APP_URL}/create-account`, { waitUntil: "networkidle" });
+      const formShown = (await p.locator("#name").count()) === 1;
+      check("8u. Browser: designer opens Create account → only the form (no notice, still signed in) → after a normal sign-out → the same form", onlyForm && stillDesigner === DESIGNER && formShown, { onlyForm, stillDesigner });
       const C5 = unique("ui-customer");
       const since5 = Date.now();
       await p.fill("#name", "UI Customer");
@@ -717,9 +722,9 @@ async function main() {
 
     const { context, page: p } = await page(designerJar);
     await p.goto(`${APP_URL}/create-account`, { waitUntil: "networkidle" });
-    const note = await p.locator('[data-testid="signed-in-registering"]').innerText().catch(() => "");
-    const back = await p.locator('[data-testid="signed-in-registering"] a', { hasText: "Back to my account" }).getAttribute("href").catch(() => null);
-    check("8Ba. Signed-in designer sees the registration form + a note: current account stays signed in, use a different email", (await p.locator("#name").count()) === 1 && note.includes(DESIGNER) && /different email/i.test(note) && /stays signed in/i.test(note) && back === "/designer/home", { note, back });
+    const pageText = await p.locator("main, body").first().innerText();
+    const fields = await Promise.all(["#name", "#email", "#password", "#confirmPassword", 'input[type="checkbox"]', 'button[type="submit"]'].map((s) => p.locator(s).count()));
+    check("8Ba. Signed-in designer sees ONLY the registration form (all fields, no notice, no 'Back to my account' / 'Sign out instead')", fields.every((n) => n === 1) && (await p.locator('[role="status"]').count()) === 0 && !NOTICE_TEXT.some((t) => pageText.includes(t)) && !pageText.includes(DESIGNER), { fields, found: NOTICE_TEXT.filter((t) => pageText.includes(t)) });
 
     // Same email as the signed-in account → refused before anything is sent.
     const posts = [];

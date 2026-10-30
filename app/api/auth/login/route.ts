@@ -11,6 +11,7 @@ import { errorResponse } from "@/lib/supabase/errors";
 import { supabaseConfig } from "@/lib/supabase/config";
 import type { Database } from "@/lib/supabase/types";
 import { roleHomePath } from "@/lib/auth/routes";
+import { AUTH_UNAVAILABLE_MESSAGE, RATE_LIMITED_MESSAGE, authErrorLogFields, classifyAuthError } from "@/lib/auth/auth-errors";
 
 export const dynamic = "force-dynamic";
 
@@ -29,19 +30,32 @@ export async function POST(request: Request) {
     const supabase = createClient();
     const { data: signIn, error } = await supabase.auth.signInWithPassword({ email, password });
     if (error) {
-      if (error.code === "email_not_confirmed") {
+      // "Incorrect email or password" ONLY when Supabase said so — a database, network or
+      // configuration failure gets its own message (and is logged with its code, never echoed).
+      const kind = classifyAuthError(error);
+      if (kind === "email_not_confirmed") {
         return NextResponse.json(
           { status: "error", code: "email_not_confirmed", message: "Please verify your email before signing in." },
           { status: 400 }
         );
       }
-      if (error.code === "invalid_credentials") {
+      if (kind === "invalid_credentials") {
         return NextResponse.json(
-          { status: "error", message: "Incorrect email or password." },
+          { status: "error", code: "invalid_credentials", message: "Incorrect email or password." },
           { status: 400 }
         );
       }
-      throw error;
+      if (kind === "rate_limited") {
+        return NextResponse.json({ status: "error", code: "rate_limited", message: RATE_LIMITED_MESSAGE }, { status: 429 });
+      }
+      console.error("[auth:login] sign-in failed", authErrorLogFields(error));
+      if (kind === "unavailable" || kind === "email_send_failed") {
+        return NextResponse.json({ status: "error", code: "auth_unavailable", message: AUTH_UNAVAILABLE_MESSAGE }, { status: 503 });
+      }
+      return NextResponse.json(
+        { status: "error", code: "sign_in_failed", message: "We couldn't sign you in. Please check your details and try again." },
+        { status: 400 }
+      );
     }
 
     // Route by the VERIFIED role of the account that just signed in. The role RPCs run with a client

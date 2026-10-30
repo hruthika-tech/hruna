@@ -22,6 +22,7 @@ import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { supabaseConfig } from "@/lib/supabase/config";
 import { errorResponse } from "@/lib/supabase/errors";
+import { RATE_LIMITED_MESSAGE, RESET_UNAVAILABLE_MESSAGE, authErrorLogFields, classifyAuthError } from "@/lib/auth/auth-errors";
 
 export const dynamic = "force-dynamic";
 
@@ -40,10 +41,21 @@ export async function POST(request: Request) {
     const { error } = await supabase.auth.resetPasswordForEmail(email, {
       redirectTo: `${supabaseConfig.siteUrl()}/reset-password`,
     });
-    // Deliberately not re-thrown for most cases — see the generic-response note above. A genuine
-    // rate-limit (429) is the one thing still worth surfacing, so the user knows to wait rather
-    // than assume the (silently-swallowed) request failed.
-    if (error && error.status === 429) throw error;
+    // The generic success message is only for a request Supabase ACCEPTED (it answers the same for
+    // unknown addresses, so that reveals nothing). A failure that has nothing to do with the address
+    // — Auth/database/network down, misconfiguration — is reported as a failure so nobody waits for
+    // an email that was never sent. An email-send (SMTP) failure, though, only happens for real
+    // accounts, so it's logged and answered generically to keep this from revealing accounts.
+    if (error) {
+      const kind = classifyAuthError(error);
+      console.error("[auth:forgot-password] reset request failed", authErrorLogFields(error));
+      if (kind === "rate_limited") {
+        return NextResponse.json({ status: "error", code: "rate_limited", message: RATE_LIMITED_MESSAGE }, { status: 429 });
+      }
+      if (kind === "unavailable") {
+        return NextResponse.json({ status: "error", code: "reset_unavailable", message: RESET_UNAVAILABLE_MESSAGE }, { status: 503 });
+      }
+    }
 
     return NextResponse.json({ status: "ok", message: GENERIC_SUCCESS_MESSAGE });
   } catch (err) {
