@@ -6,8 +6,10 @@
 // Prereqs: `npm run db:start` + a fresh `npm run db:reset` + supabase/test-fixtures/phase4-review.sql applied +
 // `npx next dev -p 3100` running. Run with: node scripts/test-phase4-customer.mjs
 
-import { APP_URL, signInWithPassword, registerAndConfirm, rawClientFromCookie } from "./lib/test-auth.mjs";
+import { APP_URL, signInWithPassword, registerAndConfirm, rawClientFromCookie, assertLocalTestEnvironment } from "./lib/test-auth.mjs";
 import { messageSide } from "../lib/messaging/alignment.ts";
+
+await assertLocalTestEnvironment(); // local app + local Supabase only — aborts otherwise
 
 let pass = 0;
 let fail = 0;

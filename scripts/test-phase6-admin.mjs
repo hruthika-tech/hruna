@@ -7,7 +7,9 @@
 // no creation endpoint anywhere in the app, by design) + `npx next dev -p 3100` running.
 // Run with: node scripts/test-phase6-admin.mjs
 
-import { APP_URL, signInWithPassword } from "./lib/test-auth.mjs";
+import { APP_URL, signInWithPassword, assertLocalTestEnvironment } from "./lib/test-auth.mjs";
+
+await assertLocalTestEnvironment(); // local app + local Supabase only — aborts otherwise
 
 let pass = 0;
 let fail = 0;

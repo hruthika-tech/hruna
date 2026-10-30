@@ -28,7 +28,9 @@
 import crypto from "node:crypto";
 import { execSync } from "node:child_process";
 
-import { APP_URL, signInWithPassword, requireEnv } from "./lib/test-auth.mjs";
+import { APP_URL, signInWithPassword, requireEnv, assertLocalTestEnvironment } from "./lib/test-auth.mjs";
+
+await assertLocalTestEnvironment(); // local app + local Supabase only — aborts otherwise
 
 // TEST-ONLY Razorpay credentials, read from the environment (never hardcoded). They must equal the
 // RAZORPAY_KEY_ID / RAZORPAY_KEY_SECRET / RAZORPAY_WEBHOOK_SECRET the LOCAL app under test runs with,

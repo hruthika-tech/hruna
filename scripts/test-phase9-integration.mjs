@@ -7,7 +7,9 @@
 // Prereqs: `npm run db:start` + a fresh `npm run db:reset` + `npx next dev -p 3100` running.
 // Run with: node scripts/test-phase9-integration.mjs
 
-import { APP_URL, signInWithPassword, registerAndConfirm } from "./lib/test-auth.mjs";
+import { APP_URL, signInWithPassword, registerAndConfirm, assertLocalTestEnvironment } from "./lib/test-auth.mjs";
+
+await assertLocalTestEnvironment(); // local app + local Supabase only — aborts otherwise
 
 let pass = 0;
 let fail = 0;

@@ -17,8 +17,10 @@ import { readdirSync, readFileSync } from "node:fs";
 import { createHash } from "node:crypto";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { APP_URL, assertLocalTestEnvironment } from "./lib/test-auth.mjs";
 
-const APP_URL = process.env.HRUNA_TEST_APP_URL ?? "http://localhost:3100";
+await assertLocalTestEnvironment(); // local app + local Supabase only — aborts otherwise
+
 if (!/^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(APP_URL)) throw new Error(`Refusing non-local app ${APP_URL}`);
 const DB_CONTAINER = process.env.HRUNA_TEST_DB_CONTAINER ?? "supabase_db_lilirve-app";
 const SITE = "https://www.hruna.in";

@@ -6,7 +6,9 @@
 // Prereqs: fresh `npm run db:reset` + `npx next dev -p 3100` running. Run with:
 //   node scripts/test-phase5-designer.mjs
 
-import { APP_URL, signInWithPassword } from "./lib/test-auth.mjs";
+import { APP_URL, signInWithPassword, assertLocalTestEnvironment } from "./lib/test-auth.mjs";
+
+await assertLocalTestEnvironment(); // local app + local Supabase only — aborts otherwise
 
 let pass = 0;
 let fail = 0;

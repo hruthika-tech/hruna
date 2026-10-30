@@ -6,7 +6,10 @@
 // buttons reach the existing pages.
 // Prereqs: the app on HRUNA_TEST_APP_URL (default http://localhost:3100). Run: node scripts/test-landing-header.mjs
 
-const APP_URL = process.env.HRUNA_TEST_APP_URL ?? "http://localhost:3100";
+import { APP_URL, assertLocalTestEnvironment } from "./lib/test-auth.mjs";
+
+await assertLocalTestEnvironment(); // local app + local Supabase only — aborts otherwise
+
 if (!/^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(APP_URL)) throw new Error(`Refusing non-local app ${APP_URL}`);
 
 let passed = 0;

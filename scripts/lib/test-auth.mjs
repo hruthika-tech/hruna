@@ -42,6 +42,18 @@ export const FRESH_PASSWORD = `Test1-${randomUUID()}`;
 const LOOPBACK = new Set(["localhost", "127.0.0.1", "[::1]", "::1"]);
 const isLoopback = (url) => LOOPBACK.has(new URL(url).hostname);
 
+/** True only for a local Supabase CLI JWT (iss "supabase-demo", no project ref). Never logs the key. */
+function isLocalStackKey(key) {
+  const parts = key.split(".");
+  if (parts.length !== 3) return false;
+  try {
+    const claims = JSON.parse(Buffer.from(parts[1], "base64url").toString("utf8"));
+    return claims.iss === "supabase-demo" && !("ref" in claims);
+  } catch {
+    return false;
+  }
+}
+
 let verified = false;
 /** Refuses to run unless the app under test is wired to a LOCAL Supabase. Next.js inlines
  *  NEXT_PUBLIC_SUPABASE_URL into the browser bundle, so the app's own JS reveals which project it
@@ -50,6 +62,13 @@ export async function assertLocalTestEnvironment() {
   if (verified) return;
   for (const [name, url] of [["HRUNA_TEST_APP_URL", APP_URL], ["HRUNA_TEST_SUPABASE_URL", SUPABASE_URL], ["HRUNA_TEST_MAILPIT_URL", MAILPIT_URL]]) {
     if (!isLoopback(url)) abort(`${name} (${url}) is not a local address.`);
+  }
+  // A hosted project's key used with a local URL (or via a proxy) must not slip through either:
+  // hosted keys are JWTs issued by "supabase" carrying the project "ref"; local CLI keys are issued by
+  // "supabase-demo" with no ref. Anything that can't be read as a local key is refused.
+  for (const name of ["HRUNA_TEST_SUPABASE_ANON_KEY", "HRUNA_TEST_SERVICE_KEY"]) {
+    const key = process.env[name];
+    if (key && !isLocalStackKey(key)) abort(`${name} is not a local Supabase key (it looks like a hosted project's key, or can't be verified).`);
   }
   let html;
   try {

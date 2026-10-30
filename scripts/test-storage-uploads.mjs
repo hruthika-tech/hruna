@@ -15,7 +15,9 @@
 // Run with: node scripts/test-storage-uploads.mjs
 
 import { execSync } from "node:child_process";
-import { APP_URL, signInWithPassword, registerAndConfirm, registerDirect } from "./lib/test-auth.mjs";
+import { APP_URL, signInWithPassword, registerAndConfirm, registerDirect, assertLocalTestEnvironment } from "./lib/test-auth.mjs";
+
+await assertLocalTestEnvironment(); // local app + local Supabase only — aborts otherwise
 
 /** Check against the LOCAL Supabase DB container (same helper as the Phase 10 suite); set
  *  HRUNA_TEST_DB_CONTAINER to point it at a different local stack's DB container. */

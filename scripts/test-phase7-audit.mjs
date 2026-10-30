@@ -8,7 +8,9 @@
 // (scratchpad/phase6-fixtures.sql) + `npx next dev -p 3100` running.
 // Run with: node scripts/test-phase7-audit.mjs
 
-import { APP_URL, signInWithPassword } from "./lib/test-auth.mjs";
+import { APP_URL, signInWithPassword, assertLocalTestEnvironment } from "./lib/test-auth.mjs";
+
+await assertLocalTestEnvironment(); // local app + local Supabase only — aborts otherwise
 
 // Fingerprints unique to the old mock catalog (lib/mock-data.ts) — if any of these ever show up in
 // a real page's response again, the mock data has regressed back in.

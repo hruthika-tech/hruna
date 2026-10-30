@@ -4,8 +4,12 @@
  * (before admins were blocked from the designer role) to a real, non-admin designer test account.
  * Nothing is deleted. DRY RUN by default — prints exactly what would change and writes nothing.
  *
- *   node scripts/transfer-admin-designer-content.mjs --mode=profile --to=<email>  [--apply]
- *   node scripts/transfer-admin-designer-content.mjs --mode=content --to=<email>  [--apply]
+ *   node scripts/transfer-admin-designer-content.mjs --mode=profile --to=<email>  [--apply --confirm-target=<db host>]
+ *   node scripts/transfer-admin-designer-content.mjs --mode=content --to=<email>  [--apply --confirm-target=<db host>]
+ *
+ * NOT A TEST. It writes to whatever database .env.local names — which may be the LIVE project. Every
+ * run prints the target host first; --apply additionally requires --confirm-target=<that exact host>
+ * and is refused when HRUNA_TEST_* variables are set.
  *   optional: --from-designer=<designer_profiles.id>  (default: the single admin-owned profile)
  *
  * --mode=profile  Hands the WHOLE designer profile row (and everything hanging off it by
@@ -44,13 +48,32 @@ function fail(msg) {
   process.exit(1);
 }
 if (!["profile", "content"].includes(MODE) || !TO_EMAIL) {
-  fail("Usage: --mode=profile|content --to=<target email> [--from-designer=<id>] [--apply]");
+  fail("Usage: --mode=profile|content --to=<target email> [--from-designer=<id>] [--apply --confirm-target=<db host>]");
 }
 
 const env = {};
 for (const line of fs.readFileSync(".env.local", "utf8").split(/\r?\n/)) {
   const m = line.match(/^([A-Z_]+)=(.*)$/);
   if (m) env[m[1]] = m[2];
+}
+// Which database this run touches — .env.local may point at the HOSTED (live) project. --apply needs
+// --confirm-target=<that exact host> typed out, and is refused inside a test run (HRUNA_TEST_* set),
+// so it can't be mistaken for, or triggered as part of, an ordinary test operation.
+let targetHost = "";
+try {
+  targetHost = new URL(env.NEXT_PUBLIC_SUPABASE_URL).host;
+} catch {
+  fail("NEXT_PUBLIC_SUPABASE_URL in .env.local is missing or invalid.");
+}
+const targetIsLocal = /^(localhost|127\.0\.0\.1|\[::1\])(:\d+)?$/.test(targetHost);
+console.log(`\nTarget database: ${targetHost} — ${targetIsLocal ? "LOCAL development stack" : "HOSTED project (live data)"}`);
+if (APPLY) {
+  if (Object.keys(process.env).some((k) => k.startsWith("HRUNA_TEST_"))) {
+    fail("--apply is refused while HRUNA_TEST_* variables are set: this maintenance tool is not part of the test suites.");
+  }
+  if (args["confirm-target"] !== targetHost) {
+    fail(`--apply changes data in ${targetHost}${targetIsLocal ? "" : " (the LIVE database)"}. Re-run the dry run, check the planned changes, then add --confirm-target=${targetHost} to proceed.`);
+  }
 }
 const db = createClient(env.NEXT_PUBLIC_SUPABASE_URL, env.SUPABASE_SERVICE_ROLE_KEY, { auth: { persistSession: false } });
 

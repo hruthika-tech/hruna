@@ -10,7 +10,9 @@
 // the app on :3100 started against the LOCAL stack, plus the env vars listed in
 // scripts/lib/test-auth.mjs. Run with: node scripts/test-phase3-auth.mjs
 
-import { APP_URL, signInWithPassword, registerAndConfirm, rawClientFromCookie, seedPassword, confirmationTokenFor, FRESH_PASSWORD } from "./lib/test-auth.mjs";
+import { APP_URL, signInWithPassword, registerAndConfirm, rawClientFromCookie, seedPassword, confirmationTokenFor, FRESH_PASSWORD, assertLocalTestEnvironment } from "./lib/test-auth.mjs";
+
+await assertLocalTestEnvironment(); // local app + local Supabase only — aborts otherwise
 
 let pass = 0;
 let fail = 0;

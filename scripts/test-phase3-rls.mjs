@@ -6,7 +6,9 @@
 //
 // Run with: node scripts/test-phase3-rls.mjs (local stack only — env vars in scripts/lib/test-auth.mjs)
 
-import { registerDirect } from "./lib/test-auth.mjs";
+import { registerDirect, assertLocalTestEnvironment } from "./lib/test-auth.mjs";
+
+await assertLocalTestEnvironment(); // local app + local Supabase only — aborts otherwise
 
 let pass = 0;
 let fail = 0;

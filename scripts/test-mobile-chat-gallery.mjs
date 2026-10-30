@@ -11,9 +11,10 @@
 // Run with: node scripts/test-mobile-chat-gallery.mjs
 
 import { createClient } from "@supabase/supabase-js";
+import { APP_URL, SUPABASE_URL, assertLocalTestEnvironment } from "./lib/test-auth.mjs";
 
-const APP_URL = process.env.HRUNA_TEST_APP_URL ?? "http://localhost:3100";
-const SUPABASE_URL = process.env.HRUNA_TEST_SUPABASE_URL ?? "http://127.0.0.1:54321";
+await assertLocalTestEnvironment(); // local app + local Supabase only — aborts otherwise
+
 const PASSWORD = process.env.HRUNA_TEST_SEED_PASSWORD;
 const SERVICE_KEY = process.env.HRUNA_TEST_SERVICE_KEY;
 for (const u of [APP_URL, SUPABASE_URL]) if (!/^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(u)) throw new Error(`Refusing non-local target ${u}`);

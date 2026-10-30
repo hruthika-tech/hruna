@@ -6,7 +6,10 @@
 // Prereqs: the app on HRUNA_TEST_APP_URL (default http://localhost:3100) against a LOCAL stack,
 // plus HRUNA_TEST_SEED_PASSWORD (see scripts/lib/test-auth.mjs). Run with: node scripts/test-password-toggle.mjs
 
-const APP_URL = process.env.HRUNA_TEST_APP_URL ?? "http://localhost:3100";
+import { APP_URL, assertLocalTestEnvironment } from "./lib/test-auth.mjs";
+
+await assertLocalTestEnvironment(); // local app + local Supabase only — aborts otherwise
+
 const SEED_PASSWORD = process.env.HRUNA_TEST_SEED_PASSWORD;
 if (!/^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(APP_URL)) {
   console.error("✗ Refusing to run against a non-local app:", APP_URL);

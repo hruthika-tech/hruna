@@ -6,7 +6,10 @@
 // stack, plus HRUNA_TEST_SEED_PASSWORD. Optional: HRUNA_TEST_WIDTHS="320,360" HRUNA_TEST_ONLY="/messages".
 // Run with: node scripts/test-mobile-layout.mjs
 
-const APP_URL = process.env.HRUNA_TEST_APP_URL ?? "http://localhost:3100";
+import { APP_URL, assertLocalTestEnvironment } from "./lib/test-auth.mjs";
+
+await assertLocalTestEnvironment(); // local app + local Supabase only — aborts otherwise
+
 const PASSWORD = process.env.HRUNA_TEST_SEED_PASSWORD;
 if (!/^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(APP_URL)) throw new Error(`Refusing to run against a non-local app: ${APP_URL}`);
 if (!PASSWORD) throw new Error("HRUNA_TEST_SEED_PASSWORD is required");
