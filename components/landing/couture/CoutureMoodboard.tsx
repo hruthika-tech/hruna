@@ -94,7 +94,9 @@ export function CoutureMoodboard({ dresses, designersById }: { dresses: Dress[];
           near-native sharpness however tall the section grows (covering the whole section instead
           would enlarge the photo and crop the sides away). overflow-clip, not overflow-hidden, so
           the sticky layer can stick. */}
-      <div className="absolute inset-0" aria-hidden="true">
+      {/* Phones: damask tile over the whole section, the saree drapes along the bottom (couture.css). */}
+      <div className="hc-m-mood-bg md:hidden" aria-hidden="true" />
+      <div className="absolute inset-0 hidden md:block" aria-hidden="true">
         <div className="sticky top-0 h-[100svh] w-full overflow-hidden">
           <Image
             src="/images/couture/moodboard-burgundy-saree.png"

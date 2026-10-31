@@ -36,6 +36,35 @@
   text-shadow: 0 1px 16px rgba(10, 16, 40, 0.6);
 }
 
+/* Pinned photograph: warm ivory paper with slightly uneven, hand-cut edges (clip-path on the
+   paper) and a soft lifted shadow (filter on the wrapper, which follows the clipped shape). */
+.hc-pinned-photo {
+  filter: drop-shadow(0 18px 22px rgba(40, 8, 20, 0.38)) drop-shadow(0 3px 4px rgba(40, 8, 20, 0.3));
+}
+.hc-paper {
+  background:
+    radial-gradient(ellipse at 30% 20%, rgba(255, 255, 255, 0.55), transparent 60%),
+    linear-gradient(160deg, #fbf4e3 0%, #f3e8cf 55%, #eadbb9 100%);
+  clip-path: polygon(0.6% 1.2%, 18% 0.3%, 41% 1%, 63% 0.2%, 86% 0.9%, 99.4% 0.4%, 99.7% 22%, 99.2% 47%, 99.8% 73%, 99.3% 99%, 77% 99.7%, 52% 99.1%, 28% 99.8%, 0.5% 99.4%, 0.2% 74%, 0.8% 48%, 0.3% 23%);
+}
+@keyframes hc-float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-7px); }
+}
+.hc-float {
+  animation: hc-float 7s ease-in-out 2s infinite;
+}
+/* Phones: the embroidered fabric as a seamless mirrored tile at about native sharpness. */
+.hc-m-hero-bg {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: url("/images/couture/mobile/hero-pink-tile.jpg") center top / max(100%, 836px) auto repeat-y, #b8687c;
+}
+@media (min-resolution: 3dppx) {
+  .hc-m-hero-bg { background-size: max(100%, 557px) auto; }
+}
+
 /* ---------------------------------------------------------------- Journey */
 .hc-journey {
   background-color: var(--hc-emerald);
@@ -205,7 +234,112 @@
   border-top-color: transparent;
 }
 
+/* ---------------------------------------------------------------- Phones (< 768px)
+   Every rule below only applies under the md breakpoint, so desktop and tablet-landscape layouts
+   are unchanged. */
+
+/* Every couture section paints and stacks only within itself. */
+.hc-root {
+  isolation: isolate;
+}
+
+/* Journey + Moodboard on phones: the backdrop covers the whole section (no viewport-sized sticky
+   layer, which left gaps once the mobile URL bar collapsed and during fast scrolls). A vertically
+   mirrored tile repeats seamlessly, drawn at about native resolution for the screen density. */
+.hc-m-journey-bg,
+.hc-m-mood-bg {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+}
+.hc-m-journey-bg {
+  background:
+    linear-gradient(rgba(8, 20, 12, 0.32), rgba(8, 20, 12, 0.32)),
+    url("/images/couture/mobile/journey-silk-tile.jpg") center top / max(100%, 836px) auto repeat-y,
+    #10301c;
+}
+@media (min-resolution: 3dppx) {
+  .hc-m-journey-bg {
+    background-size: auto, max(100%, 557px) auto, auto;
+  }
+}
+.hc-m-mood-bg {
+  /* Middle: plain damask from the centre of the artwork, mirrored so it repeats seamlessly. */
+  background: url("/images/couture/mobile/moodboard-damask-tile.jpg") center top / max(100%, 334px) auto repeat-y, #731419;
+}
+/* Top and bottom: the artwork itself drawn 1.3× the screen width (centred) so its gold filigree,
+   hanging ornaments and saree drapes read large and clear on a narrow phone, at about native
+   sharpness; each fades softly into the damask. */
+.hc-m-mood-bg::before,
+.hc-m-mood-bg::after {
+  content: "";
+  position: absolute;
+  left: -15%;
+  right: -15%;
+  aspect-ratio: 1672 / 941;
+  background-image: url("/images/couture/moodboard-burgundy-saree.png");
+  background-size: 100% auto;
+  background-repeat: no-repeat;
+}
+.hc-m-mood-bg::before {
+  top: 0;
+  background-position: center top;
+  -webkit-mask-image: linear-gradient(to bottom, #000 30%, transparent 62%);
+  mask-image: linear-gradient(to bottom, #000 30%, transparent 62%);
+}
+.hc-m-mood-bg::after {
+  bottom: 0;
+  background-position: center bottom;
+  -webkit-mask-image: linear-gradient(to bottom, transparent 22%, #000 55%);
+  mask-image: linear-gradient(to bottom, transparent 22%, #000 55%);
+}
+
+/* Final CTA on phones: emerald silk tile (seamless, about native sharpness) with the saree's gold
+   border laid along the bottom edge, both drawn from the original photo. */
+.hc-m-cta-bg {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background:
+    url("/images/couture/mobile/cta-border.jpg") center bottom / auto 112px repeat-x,
+    url("/images/couture/mobile/cta-silk-tile.jpg") center top / max(100%, 921px) auto repeat-y,
+    #0d3d1f;
+}
+
+/* Designer book on phones: a single open page with a spine shadow and page edges, holding a
+   smaller, proportionate card (zoom scales the shared DesignerPage card as a whole). */
+@media (max-width: 767px) {
+  .hc-book {
+    background:
+      linear-gradient(90deg, rgba(92, 21, 38, 0.28), rgba(92, 21, 38, 0) 7%),
+      linear-gradient(90deg, #f8efdc, #efe2c8);
+    box-shadow:
+      0 24px 60px rgba(20, 0, 8, 0.55),
+      3px 3px 0 #e6d6b6,
+      6px 6px 0 #d9c7a2,
+      inset 0 0 0 8px var(--hc-burgundy-deep),
+      inset 0 0 0 10px var(--hc-gold);
+  }
+  /* The section's pink textile as a seamless tile at about native sharpness (overrides the
+     single photo stretched over the whole section). */
+  .hc-book-backdrop {
+    background-image: url("/images/couture/mobile/book-textile-tile.jpg") !important;
+    background-size: max(100%, 338px) auto !important;
+    background-repeat: repeat-y !important;
+    background-position: center top !important;
+  }
+  .hc-book-m-card {
+    zoom: 0.8;
+    width: 125%; /* 1 / zoom: fills its slot after scaling, so the card stays centred on the page */
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
+  .hc-float {
+    animation: none;
+  }
   .hc-petal,
   .hc-curtain {
     display: none !important;

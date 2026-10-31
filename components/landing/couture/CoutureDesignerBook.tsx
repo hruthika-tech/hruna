@@ -63,16 +63,19 @@ export function CoutureDesignerBook({ designers }: { designers: Designer[] }) {
             <p className="text-ink-variant">New pages are being written — check back soon as designers join HRUNA.</p>
           </div>
         ) : (
-          <div className="hc-book rounded-md px-5 py-8 md:px-12 md:py-14">
+          <div className="hc-book rounded-md px-4 py-7 md:px-12 md:py-14">
             <div className="hidden md:grid md:grid-cols-2 lg:grid-cols-3 gap-10">
               {designers.map((d, i) => (
                 <MountedPhoto key={d.id} designer={d} rotate={i % 2 === 0 ? -1.5 : 1.5} />
               ))}
             </div>
-            <div className="md:hidden flex gap-5 overflow-x-auto snap-x snap-mandatory no-scrollbar pb-4 -mx-5 px-5 pt-2">
+            {/* Phones: the cards sit inside the page (smaller, via zoom) with the next one peeking. */}
+            <div className="md:hidden flex gap-4 overflow-x-auto snap-x snap-mandatory no-scrollbar pb-4 px-[9%] pt-3">
               {designers.map((d) => (
-                <div key={d.id} className="snap-center shrink-0 w-[74vw]">
-                  <MountedPhoto designer={d} rotate={0} />
+                <div key={d.id} className="snap-center shrink-0 w-[82%]">
+                  <div className="hc-book-m-card">
+                    <MountedPhoto designer={d} rotate={0} />
+                  </div>
                 </div>
               ))}
             </div>

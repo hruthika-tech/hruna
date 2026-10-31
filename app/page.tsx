@@ -5,7 +5,7 @@ import { CoutureJourney } from "@/components/landing/couture/CoutureJourney";
 import { CoutureDesignerBook } from "@/components/landing/couture/CoutureDesignerBook";
 import { CoutureMoodboard } from "@/components/landing/couture/CoutureMoodboard";
 import { SectionMorph } from "@/components/landing/couture/SectionMorph";
-import { SectionFlexCarousel } from "@/components/landing/couture/SectionFlexCarousel";
+import { SectionCircularCarousel } from "@/components/landing/couture/SectionCircularCarousel";
 import "@/components/landing/couture/couture.css";
 import { CoutureWhyHruna } from "@/components/landing/couture/CoutureWhyHruna";
 import { CoutureFinalCTA } from "@/components/landing/couture/CoutureFinalCTA";
@@ -46,7 +46,7 @@ export default async function LandingPage({ searchParams }: { searchParams: Reco
           in components/landing/sections/ and can be swapped back here. */}
       <CoutureHero />
       <CoutureJourney />
-      <SectionFlexCarousel />
+      <SectionCircularCarousel />
       <CoutureDesignerBook designers={designers} />
       <SectionMorph
         label="Couture in the palace"

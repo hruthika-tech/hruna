@@ -9,20 +9,23 @@ import { FadeUp } from "@/components/landing/Motion";
 //
 // The photo covers the section anchored to its bottom edge, so any crop only trims plain silk at the
 // top (or the repeating border at the sides) — the gold border is never cut. The border is the
-// bottom ~24.5% of the 1600×742 image, so the bottom padding leaves room for it below the card:
-// at least 190px, or 11.4vw + 16px on wide screens (where the image is drawn by width,
+// bottom 27.4% of the 1842×854 image, so the bottom padding leaves room for it below the card:
+// at least 224px, or 12.7vw + 40px on wide screens (where the image is drawn by width,
 // 0.464 × width tall).
 export function CoutureFinalCTA() {
   return (
-    <section className="relative bg-[#0d3d1f] pt-24 md:pt-32 pb-[max(190px,calc(11.4vw+16px))] overflow-hidden">
+    <section className="relative bg-[#0d3d1f] pt-24 md:pt-32 pb-[150px] md:pb-[max(224px,calc(12.7vw+40px))] overflow-hidden">
+      {/* Phones: the photo would be enlarged ~3× to cover a tall narrow section — use the silk as a
+          sharp repeating tile and the gold border along the bottom instead (couture.css). */}
+      <div className="hc-m-cta-bg md:hidden" aria-hidden="true" />
       <Image
-        src="/images/couture/final-cta-emerald-pattu.jpg"
+        src="/images/couture/final-cta-emerald-pattu-hd.png"
         alt=""
         aria-hidden="true"
         fill
         quality={90}
-        sizes="(max-width: 1279px) 1600px, 100vw"
-        className="object-cover object-[center_bottom]"
+        sizes="(max-width: 767px) 1px, (max-width: 1279px) 1842px, 100vw"
+        className="hidden md:block object-cover object-[center_bottom]"
       />
 
       <div className="container-editorial relative flex justify-center">

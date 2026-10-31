@@ -111,9 +111,11 @@ export function CoutureJourney() {
           up to cover the whole section (soft, stretched) a viewport-sized layer stays pinned while
           the journey scrolls over it — the weave is shown at its natural resolution on every screen.
           (overflow-clip, not overflow-hidden, so the sticky layer can stick.) */}
-      <div className="absolute inset-0" aria-hidden="true">
+      {/* Phones: a full-coverage silk tile (couture.css .hc-m-journey-bg). */}
+      <div className="hc-m-journey-bg md:hidden" aria-hidden="true" />
+      <div className="absolute inset-0 hidden md:block" aria-hidden="true">
         <div className="sticky top-0 h-[100svh] w-full overflow-hidden">
-          <Image src="/images/couture/journey-green-silk.png" alt="" fill quality={90} sizes="100vw" className="object-cover object-center" />
+          <Image src="/images/couture/journey-green-silk-lotus.png" alt="" fill quality={90} sizes="100vw" className="object-cover object-center" />
           <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,rgba(8,20,12,0.15),rgba(8,20,12,0.55))]" />
         </div>
       </div>
@@ -149,20 +151,25 @@ export function CoutureJourney() {
 
         <div className="hc-journey-steps relative max-w-3xl mx-auto">
           <div
-            className="hc-journey-spine absolute left-[4.5rem] md:left-1/2 top-4 bottom-4 w-px bg-gradient-to-b from-[#d4ae5f]/0 via-[#d4ae5f] to-[#d4ae5f]/0 md:-translate-x-1/2"
+            className="hc-journey-spine absolute left-1/2 -translate-x-1/2 top-4 bottom-4 w-px bg-gradient-to-b from-[#d4ae5f]/0 via-[#d4ae5f] to-[#d4ae5f]/0"
             aria-hidden="true"
           />
           <ol className="relative flex flex-col gap-14 md:gap-20">
             {STEPS.map((step, i) => {
               const flip = i % 2 === 1;
               return (
-                <li key={step.num} className="hc-journey-step relative grid grid-cols-[9rem_1fr] md:grid-cols-[1fr_10.5rem_1fr] items-center gap-x-3 md:gap-x-8">
+                <li
+                  key={step.num}
+                  className="hc-journey-step relative flex flex-col items-center gap-3 md:grid md:grid-cols-[1fr_10.5rem_1fr] md:items-center md:gap-x-8 md:gap-y-0"
+                >
+                  {/* Phones: the lotus sits on the centre line and its card swings left / right
+                      beneath it — the same zigzag as desktop, stacked to fit a narrow screen. */}
                   <div className={`flex justify-center md:col-start-2 md:row-start-1`}>
                     <Lotus num={step.num} />
                   </div>
                   <div
-                    className={`hc-journey-card rounded-md border border-[#d4ae5f]/40 bg-[#13261a]/55 backdrop-blur-sm px-5 py-4 md:row-start-1 ${
-                      flip ? "md:col-start-3 md:text-left" : "md:col-start-1 md:text-right"
+                    className={`hc-journey-card w-[84%] md:w-auto rounded-md border border-[#d4ae5f]/40 bg-[#13261a]/70 md:bg-[#13261a]/55 backdrop-blur-sm px-4 py-3.5 md:px-5 md:py-4 md:row-start-1 ${
+                      flip ? "self-end text-left md:self-auto md:col-start-3 md:text-left" : "self-start text-right md:self-auto md:col-start-1 md:text-right"
                     }`}
                   >
                     <h3 className="text-headline-sm text-[#f7efdf]">{step.title}</h3>
