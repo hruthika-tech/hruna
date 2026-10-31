@@ -1,0 +1,218 @@
+/* HRUNA homepage — Indian couture experiment. Homepage-only: every selector here is prefixed
+   `hc-` (HRUNA couture) and only used by components/landing/couture/*, so nothing leaks onto other
+   pages. Palette taken from the reference artwork. */
+
+.hc-root {
+  --hc-emerald: #1e3a28;
+  --hc-emerald-deep: #13261a;
+  --hc-moss: #4f6b3c;
+  --hc-lotus: #e9a6b8;
+  --hc-lotus-deep: #c9708a;
+  --hc-magenta: #a3195b;
+  --hc-burgundy: #5c1526;
+  --hc-burgundy-deep: #3d0d18;
+  --hc-gold: #d4ae5f;
+  --hc-gold-soft: #ead6a4;
+  --hc-ivory: #f7efdf;
+  --hc-indigo: #1b2a5c;
+}
+
+/* Paper / fabric grain laid over textured sections (an inline SVG noise — no extra asset). */
+.hc-grain::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0.18;
+  mix-blend-mode: overlay;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='160'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 0.9 0'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>");
+}
+
+/* ---------------------------------------------------------------- Hero */
+.hc-hero-title {
+  text-shadow: 0 2px 30px rgba(10, 16, 40, 0.55);
+}
+.hc-hero-copy {
+  text-shadow: 0 1px 16px rgba(10, 16, 40, 0.6);
+}
+
+/* ---------------------------------------------------------------- Journey */
+.hc-journey {
+  background-color: var(--hc-emerald);
+  background-image:
+    radial-gradient(ellipse at 20% 10%, rgba(120, 150, 90, 0.35), transparent 55%),
+    radial-gradient(ellipse at 85% 80%, rgba(10, 30, 18, 0.7), transparent 60%),
+    radial-gradient(ellipse at 60% 40%, rgba(79, 107, 60, 0.35), transparent 60%);
+}
+.hc-petal {
+  position: absolute;
+  top: -40px;
+  width: 14px;
+  height: 20px;
+  border-radius: 80% 0 80% 0;
+  background: linear-gradient(135deg, #f4c2cf, #d98aa0);
+  opacity: 0;
+  pointer-events: none;
+  animation: hc-petal-fall linear infinite;
+}
+@keyframes hc-petal-fall {
+  0% {
+    transform: translate3d(0, 0, 0) rotate(0deg);
+    opacity: 0;
+  }
+  10% {
+    opacity: 0.85;
+  }
+  90% {
+    opacity: 0.7;
+  }
+  100% {
+    transform: translate3d(var(--hc-drift, 60px), var(--hc-fall, 110vh), 0) rotate(540deg);
+    opacity: 0;
+  }
+}
+
+/* ---------------------------------------------------------------- Designer book */
+.hc-book-backdrop {
+  background-color: var(--hc-burgundy);
+  background-size: cover;
+  background-position: center;
+}
+.hc-book-backdrop::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(180deg, rgba(92, 21, 38, 0.82), rgba(61, 13, 24, 0.9)),
+    radial-gradient(ellipse at 50% 20%, rgba(163, 25, 91, 0.35), transparent 60%);
+}
+.hc-book {
+  background: linear-gradient(90deg, #efe2c8 0%, #f8efdc 48%, #e6d6b6 50%, #f8efdc 52%, #efe2c8 100%);
+  box-shadow:
+    0 30px 80px rgba(20, 0, 8, 0.55),
+    inset 0 0 0 10px var(--hc-burgundy-deep),
+    inset 0 0 0 12px var(--hc-gold);
+}
+.hc-photo {
+  position: relative;
+  padding: 10px;
+  background: #fffaf0;
+  box-shadow: 0 10px 28px rgba(61, 13, 24, 0.28);
+}
+/* Gold photo corners, the way prints are mounted in an old portfolio. */
+.hc-photo::before,
+.hc-photo::after,
+.hc-photo > .hc-corner-bl,
+.hc-photo > .hc-corner-br {
+  content: "";
+  position: absolute;
+  width: 26px;
+  height: 26px;
+  z-index: 20;
+  pointer-events: none;
+  background: linear-gradient(135deg, var(--hc-gold) 50%, transparent 50%);
+  filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.25));
+}
+.hc-photo::before {
+  top: -4px;
+  left: -4px;
+}
+.hc-photo::after {
+  top: -4px;
+  right: -4px;
+  transform: rotate(90deg);
+}
+.hc-photo > .hc-corner-br {
+  bottom: -4px;
+  right: -4px;
+  transform: rotate(180deg);
+}
+.hc-photo > .hc-corner-bl {
+  bottom: -4px;
+  left: -4px;
+  transform: rotate(270deg);
+}
+
+/* ---------------------------------------------------------------- Moodboard */
+/* Double gold rule with ornamental corner knots. */
+.hc-gold-frame {
+  position: relative;
+  border: 1.5px solid var(--hc-gold);
+  outline: 1px solid rgba(212, 174, 95, 0.55);
+  outline-offset: 7px;
+}
+.hc-gold-knot {
+  position: absolute;
+  width: 34px;
+  height: 34px;
+  color: var(--hc-gold);
+  pointer-events: none;
+}
+
+/* ---------------------------------------------------------------- Section transitions */
+.hc-morph-band .morph-slider {
+  box-shadow:
+    0 0 0 1px rgba(212, 174, 95, 0.6),
+    0 24px 70px rgba(0, 0, 0, 0.45);
+}
+
+/* ---------------------------------------------------------------- Footer (homepage only)
+   The shared <Footer/> is wrapped in .hc-footer on the homepage alone (app/page.tsx); other pages
+   keep the plain green footer. The saree photo is used in pieces so its gold borders are never
+   cropped or distorted: the top and bottom borders span the full width at their natural
+   proportions (180 and 206 rows of the photo's 1672 px width), and the padding keeps the footer
+   content clear of them.
+   Sharpness: the silk fills ONLY the band between the borders (::before) as a vertically mirrored
+   tile (seamless joins) drawn at the image native resolution for each screen density, instead of
+   one copy enlarged ~2× to cover the whole footer. Screens wider than the 1672 px source still show
+   it stretched to full width (a slight, unavoidable enlargement). */
+.hc-footer {
+  position: relative;
+  background:
+    url("/images/couture/footer/footer-top.jpg") top center / 100% auto no-repeat,
+    url("/images/couture/footer/footer-bottom.jpg") bottom center / 100% auto no-repeat,
+    #0f3a17;
+  padding-top: calc(10.77vw + 4px);
+  padding-bottom: calc(12.32vw + 4px);
+}
+.hc-footer::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 10.77vw;
+  bottom: 12.32vw;
+  /* Mirrored silk tile (1672 × 1110), drawn at the source native resolution for the screen
+     density (one image pixel per device pixel) and never narrower than the footer. */
+  background: url("/images/couture/footer/footer-silk-tile.jpg") center top / max(100%, 1672px) auto repeat-y;
+  pointer-events: none;
+}
+@media (min-resolution: 1.25dppx) {
+  .hc-footer::before { background-size: max(100%, 1338px) auto; }
+}
+@media (min-resolution: 1.5dppx) {
+  .hc-footer::before { background-size: max(100%, 1115px) auto; }
+}
+@media (min-resolution: 2dppx) {
+  .hc-footer::before { background-size: max(100%, 836px) auto; }
+}
+@media (min-resolution: 3dppx) {
+  .hc-footer::before { background-size: max(100%, 557px) auto; }
+}
+.hc-footer > footer {
+  position: relative;
+  background: transparent;
+  border-top-color: transparent;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hc-petal,
+  .hc-curtain {
+    display: none !important;
+  }
+  /* Framer Motion writes inline styles; !important pins hero elements to their final state. */
+  .hc-motion {
+    transform: none !important;
+    opacity: 1 !important;
+  }
+}

@@ -176,7 +176,9 @@ console.log("\n=== Public page metadata ===");
   check("homepage: full brand title and exactly one <h1>", home.title === "HRUNA — Where Vision Meets Craft" && home.h1 === 1, home);
   const homeHtml = (await get("/")).text;
   const h1 = homeHtml.match(/<h1\b[^>]*>([\s\S]*?)<\/h1>/);
-  check("homepage <h1> is the HRUNA wordmark, with the original classes", !!h1 && h1[1].replace(/<[^>]+>/g, "") === "HRUNA" && /class="font-display text-6xl sm:text-7xl md:text-8xl text-scrapbook-forest tracking-tight flex"/.test(h1[0]), h1?.[0]);
+  // The hero's colours/classes are a design choice (the couture homepage restyled them); SEO only
+  // needs the single <h1> to be the HRUNA wordmark in the brand display face.
+  check("homepage <h1> is the HRUNA wordmark in the brand display face", !!h1 && h1[1].replace(/<[^>]+>/g, "") === "HRUNA" && /class="[^"]*\bfont-display\b[^"]*"/.test(h1[0]), h1?.[0]);
   const ogImage = `${SITE}/brand/hruna-og.png`;
   check("homepage: og:image + twitter:image = the 1200x630 share image", meta(homeHtml, "og:image") === ogImage && meta(homeHtml, "og:image:width") === "1200" && meta(homeHtml, "og:image:height") === "630" && !!meta(homeHtml, "og:image:alt") && meta(homeHtml, "twitter:image") === ogImage, { og: meta(homeHtml, "og:image"), tw: meta(homeHtml, "twitter:image") });
   const noImage = [];

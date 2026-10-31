@@ -1,11 +1,14 @@
 import { Footer } from "@/components/layout/Footer";
 import { LandingHeader } from "@/components/landing/LandingHeader";
-import { Hero } from "@/components/landing/sections/Hero";
-import { Journey } from "@/components/landing/sections/Journey";
-import { DesignerBookSection } from "@/components/landing/sections/DesignerBookSection";
-import { MoodboardSection } from "@/components/landing/sections/MoodboardSection";
-import { WhyHruna } from "@/components/landing/sections/WhyHruna";
-import { FinalCTA } from "@/components/landing/sections/FinalCTA";
+import { CoutureHero } from "@/components/landing/couture/CoutureHero";
+import { CoutureJourney } from "@/components/landing/couture/CoutureJourney";
+import { CoutureDesignerBook } from "@/components/landing/couture/CoutureDesignerBook";
+import { CoutureMoodboard } from "@/components/landing/couture/CoutureMoodboard";
+import { SectionMorph } from "@/components/landing/couture/SectionMorph";
+import { SectionFlexCarousel } from "@/components/landing/couture/SectionFlexCarousel";
+import "@/components/landing/couture/couture.css";
+import { CoutureWhyHruna } from "@/components/landing/couture/CoutureWhyHruna";
+import { CoutureFinalCTA } from "@/components/landing/couture/CoutureFinalCTA";
 import { createClient } from "@/lib/supabase/server";
 import { listApprovedDesigners, listDresses, getPlatformStats } from "@/lib/customer/discovery";
 import { redirect } from "next/navigation";
@@ -38,13 +41,27 @@ export default async function LandingPage({ searchParams }: { searchParams: Reco
   return (
     <div>
       <LandingHeader />
-      <Hero />
-      <Journey />
-      <DesignerBookSection designers={designers} />
-      <MoodboardSection dresses={dresses} designersById={designersById} />
-      <WhyHruna stats={stats} />
-      <FinalCTA />
-      <Footer />
+      {/* Indian-couture visual experiment (homepage only): sections 01–04 use the couture
+          variants in components/landing/couture/; the original section components are unchanged
+          in components/landing/sections/ and can be swapped back here. */}
+      <CoutureHero />
+      <CoutureJourney />
+      <SectionFlexCarousel />
+      <CoutureDesignerBook designers={designers} />
+      <SectionMorph
+        label="Couture in the palace"
+        transition="swirl"
+        from="#5c1526"
+        to="#3d0d18"
+        images={["/images/couture/palace-trio.png", "/images/couture/hero-palace-blue-ensemble.png", "/images/couture/sketch-lotus-gowns.png"]}
+      />
+      <CoutureMoodboard dresses={dresses} designersById={designersById} />
+      <CoutureWhyHruna stats={stats} />
+      <CoutureFinalCTA />
+      {/* Homepage-only saree background for the shared footer (couture.css .hc-footer). */}
+      <div className="hc-footer">
+        <Footer />
+      </div>
     </div>
   );
 }
