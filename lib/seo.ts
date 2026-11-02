@@ -40,6 +40,35 @@ export function absoluteUrl(path: string): string {
   return path === "/" ? SITE_URL : new URL(path, SITE_URL).toString();
 }
 
+/** schema.org structured data for the homepage: who the site belongs to (Organization) and the
+ *  site itself (WebSite). Brand facts only — no prices, ratings or user content. */
+export function siteJsonLd(): string {
+  const data = {
+    "@context": "https://schema.org",
+    "@graph": [
+      {
+        "@type": "Organization",
+        "@id": `${SITE_URL}/#organization`,
+        name: SITE_NAME,
+        url: SITE_URL,
+        logo: `${SITE_URL}/brand/hruna-logo.png`,
+        description: DEFAULT_DESCRIPTION,
+      },
+      {
+        "@type": "WebSite",
+        "@id": `${SITE_URL}/#website`,
+        name: SITE_NAME,
+        url: SITE_URL,
+        description: DEFAULT_DESCRIPTION,
+        inLanguage: "en-IN",
+        publisher: { "@id": `${SITE_URL}/#organization` },
+      },
+    ],
+  };
+  // Escape "<" so the JSON can never close the surrounding <script> tag.
+  return JSON.stringify(data).replace(/</g, "\\u003c");
+}
+
 /** Trims text to at most `max` characters on a word boundary, for meta descriptions. */
 export function truncateDescription(text: string, max = 160): string {
   const clean = text.replace(/\s+/g, " ").trim();

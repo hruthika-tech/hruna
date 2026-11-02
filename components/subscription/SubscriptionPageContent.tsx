@@ -13,7 +13,10 @@ import type { SubscriptionSummary } from "@/lib/subscription-access";
 
 declare global {
   interface Window {
-    Razorpay?: new (options: Record<string, unknown>) => { open: () => void };
+    Razorpay?: new (options: Record<string, unknown>) => {
+      open: () => void;
+      on: (event: "payment.failed", cb: (response: { error?: { description?: string } }) => void) => void;
+    };
   }
 }
 
@@ -54,7 +57,7 @@ export function SubscriptionPageContent({
 }) {
   const router = useRouter();
   const { push } = useToast();
-  const [busy, setBusy] = useState<"checkout" | "verifying" | "cancelling" | null>(null);
+  const [busy, setBusy] = useState<"checkout" | "verifying" | null>(null);
   const { enforced, plan, subscription } = summary;
   const isActive = subscription?.status === "active";
 
@@ -113,26 +116,6 @@ export function SubscriptionPageContent({
     }
   };
 
-  const handleCancel = async () => {
-    if (busy) return;
-    setBusy("cancelling");
-    try {
-      const res = await fetch("/api/payments/cancel", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ role }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.message ?? "Couldn't cancel your subscription.");
-      push("Subscription cancelled.", "info");
-      router.refresh();
-    } catch (err) {
-      push(err instanceof Error ? err.message : "Couldn't cancel your subscription.", "error");
-    } finally {
-      setBusy(null);
-    }
-  };
-
   return (
     <div className="min-h-screen flex flex-col items-center py-16 px-6">
       <div className="w-full max-w-lg">
@@ -179,12 +162,9 @@ export function SubscriptionPageContent({
               <p className="text-xs text-outline">Not required right now.</p>
             ) : isActive ? (
               <div className="flex flex-col gap-3">
-                {subscription?.renewalDate && (
-                  <p className="text-xs text-outline">Renews on {formatDate(subscription.renewalDate)}</p>
+                {(subscription?.endDate ?? subscription?.renewalDate) && (
+                  <p className="text-xs text-outline">Active until {formatDate((subscription!.endDate ?? subscription!.renewalDate)!)} — no automatic renewal</p>
                 )}
-                <Button variant="danger" onClick={handleCancel} disabled={busy !== null} className="w-fit">
-                  {busy === "cancelling" ? <><Loader2 size={14} className="animate-spin" /> Cancelling…</> : "Cancel Subscription"}
-                </Button>
               </div>
             ) : (
               <Button onClick={handleSubscribe} disabled={busy !== null} className="w-full">

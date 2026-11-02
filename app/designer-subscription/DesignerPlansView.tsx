@@ -77,7 +77,7 @@ export function DesignerPlansView() {
       const checkout = await res.json();
       if (!res.ok) throw new Error(checkout.message ?? "Couldn't start checkout.");
       if (!(await loadRazorpayScript()) || !window.Razorpay) throw new Error("Couldn't load the payment checkout. Please try again.");
-      new window.Razorpay({
+      const rzp = new window.Razorpay({
         key: checkout.keyId,
         order_id: checkout.orderId,
         amount: checkout.amount,
@@ -94,25 +94,15 @@ export function DesignerPlansView() {
           await load();
         },
         modal: { ondismiss: () => setBusy(null) },
-      }).open();
+      });
+      // A failed attempt keeps the modal open so the designer can retry on the same order; the
+      // server records the failure via the payment.failed webhook. Nothing is activated here.
+      rzp.on("payment.failed", (response) => {
+        push(`${(response.error?.description || "Payment failed").replace(/\.?$/, ".")} You can try again.`, "error");
+      });
+      rzp.open();
     } catch (err) {
       push(err instanceof Error ? err.message : "Couldn't start checkout.", "error");
-      setBusy(null);
-    }
-  };
-
-  const cancel = async () => {
-    if (busy) return;
-    setBusy("cancel");
-    try {
-      const res = await fetch("/api/payments/cancel", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ role: "designer" }) });
-      const json = await res.json();
-      if (!res.ok) throw new Error(json.message ?? "Couldn't cancel your plan.");
-      push("Your plan was cancelled. You're on Free — nothing you created was removed.", "info");
-      await load();
-    } catch (err) {
-      push(err instanceof Error ? err.message : "Couldn't cancel your plan.", "error");
-    } finally {
       setBusy(null);
     }
   };
@@ -199,9 +189,10 @@ export function DesignerPlansView() {
                 </Button>
               )}
               {isCurrent && onPaid && (
-                <Button variant="secondary" className="mt-5 w-full" onClick={cancel} disabled={busy !== null}>
-                  {busy === "cancel" ? "Cancelling…" : "Cancel plan (back to Free)"}
-                </Button>
+                // One-time 30-day purchase: nothing renews, so there is nothing to cancel.
+                <p className="mt-5 text-xs text-ink-variant" data-testid="paid-plan-status">
+                  {current.endsAt ? `Active until ${fmtDate(current.endsAt)}. ` : ""}It won't renew or charge you again — you'll move to Free when it ends.
+                </p>
               )}
             </div>
           );
@@ -209,7 +200,7 @@ export function DesignerPlansView() {
       </section>
 
       <p className="text-xs text-outline mt-6">
-        Paid plans are a one-month purchase with no automatic renewal. To change plans, cancel first (takes effect immediately).{" "}
+        Paid plans are a one-time payment for 30 days of access — no automatic renewal and no further charges. You can buy a plan again once the current one ends.{" "}
         <Link href="/designer/home" className="text-primary hover:underline">Back to your studio</Link>
       </p>
     </div>

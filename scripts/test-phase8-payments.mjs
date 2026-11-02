@@ -10,6 +10,8 @@
 //   - every auth/role/plan/feature-flag validation the checkout route performs BEFORE it ever
 //     calls Razorpay's real API,
 //   - the actual signature-verification math in /api/payments/verify and /api/payments/webhook
+//     (the verify route's server-side fetch of the payment from Razorpay, capture status and amount
+//     checks are covered against a local mock Razorpay API by scripts/test-payments-hardening.mjs)
 //     (HMAC-SHA256 is pure cryptography — computing it with the same secret the running server
 //     has is a genuine test of that code path, not a simulation of one),
 //   - webhook idempotency and DB-level uniqueness constraints,
@@ -26,6 +28,7 @@
 // + `npx next dev -p 3100` running. Run with: node scripts/test-phase8-payments.mjs
 
 import crypto from "node:crypto";
+import http from "node:http";
 import { execSync } from "node:child_process";
 
 import { APP_URL, signInWithPassword, requireEnv, assertLocalTestEnvironment } from "./lib/test-auth.mjs";
@@ -53,6 +56,19 @@ const FIXTURE_AMOUNT_PAISE = 19900; // 199 INR Designer Plus price, in paise
 const MEERA_USER = "d0000000-0000-0000-0000-000000000001";
 const DB_CONTAINER = process.env.HRUNA_TEST_DB_CONTAINER ?? "supabase_db_lilirve-app";
 const plus = (extra = {}) => JSON.stringify({ role: "designer", planKey: "designer_plus", ...extra });
+
+// The webhook re-fetches a captured payment from Razorpay before activating. A minimal local mock
+// (the app's RAZORPAY_API_BASE_URL_FOR_TESTS) knows only the fixture payment, and refuses order
+// creation so check 6 still sees checkout fail safely at the Razorpay call.
+const MOCK_PORT = Number(process.env.HRUNA_TEST_RAZORPAY_MOCK_PORT ?? 55690);
+const mockServer = http.createServer((req, res) => {
+  res.writeHead(req.url === "/v1/payments/pay_Fixture001" ? 200 : 400, { "Content-Type": "application/json" });
+  res.end(JSON.stringify(req.url === "/v1/payments/pay_Fixture001"
+    ? { id: "pay_Fixture001", order_id: FIXTURE_ORDER_1, amount: FIXTURE_AMOUNT_PAISE, currency: "INR", status: "captured" }
+    : { error: { code: "BAD_REQUEST_ERROR" } }));
+});
+await new Promise((resolve, reject) => mockServer.once("error", reject).listen(MOCK_PORT, "127.0.0.1", resolve));
+mockServer.unref();
 
 let pass = 0;
 let fail = 0;
@@ -96,10 +112,10 @@ function webhookSignature(rawBody) {
   return crypto.createHmac("sha256", RAZORPAY_WEBHOOK_SECRET).update(rawBody).digest("hex");
 }
 
-async function webhookPost(rawBody, signature) {
+async function webhookPost(rawBody, signature, eventId) {
   const res = await fetch(`${APP_URL}/api/payments/webhook`, {
     method: "POST",
-    headers: { "Content-Type": "application/json", "x-razorpay-signature": signature },
+    headers: { "Content-Type": "application/json", "x-razorpay-signature": signature, ...(eventId ? { "x-razorpay-event-id": eventId } : {}) },
     body: rawBody,
   });
   const data = await res.json().catch(() => ({}));
@@ -185,7 +201,7 @@ async function main() {
 
   console.log("\n=== 9. Invalid webhook signature is rejected ===");
   {
-    const rawBody = JSON.stringify({ event: "payment.captured", payload: { payment: { entity: { id: "pay_x", order_id: FIXTURE_ORDER_1, amount: FIXTURE_AMOUNT_PAISE } } } });
+    const rawBody = JSON.stringify({ event: "payment.captured", payload: { payment: { entity: { id: "pay_x", order_id: FIXTURE_ORDER_1, amount: FIXTURE_AMOUNT_PAISE, currency: "INR", status: "captured" } } } });
     const res = await webhookPost(rawBody, "0000invalid-signature");
     check("9. An invalid webhook signature is rejected (400)", res.status === 400, res.data);
 
@@ -195,9 +211,9 @@ async function main() {
 
   console.log("\n=== 10. A validly-signed webhook updates the correct record ===");
   {
-    const rawBody = JSON.stringify({ event: "payment.captured", payload: { payment: { entity: { id: "pay_fixture_001", order_id: FIXTURE_ORDER_1, amount: FIXTURE_AMOUNT_PAISE } } } });
+    const rawBody = JSON.stringify({ event: "payment.captured", payload: { payment: { entity: { id: "pay_Fixture001", order_id: FIXTURE_ORDER_1, amount: FIXTURE_AMOUNT_PAISE, currency: "INR", status: "captured" } } } });
     const signature = webhookSignature(rawBody);
-    const res = await webhookPost(rawBody, signature);
+    const res = await webhookPost(rawBody, signature, "evt_phase8_captured_001");
     check("10. A correctly-signed payment.captured webhook is accepted", res.status === 200, res.data);
 
     const paymentStatus = sql(`select status from public.payments where id = '${FIXTURE_PAYMENT_1}';`);
@@ -211,17 +227,19 @@ async function main() {
 
   console.log("\n=== 11. Duplicate webhook delivery does not create duplicate records ===");
   {
-    const rawBody = JSON.stringify({ event: "payment.captured", payload: { payment: { entity: { id: "pay_fixture_001", order_id: FIXTURE_ORDER_1, amount: FIXTURE_AMOUNT_PAISE } } } });
+    const rawBody = JSON.stringify({ event: "payment.captured", payload: { payment: { entity: { id: "pay_Fixture001", order_id: FIXTURE_ORDER_1, amount: FIXTURE_AMOUNT_PAISE, currency: "INR", status: "captured" } } } });
     const signature = webhookSignature(rawBody);
-    const res = await webhookPost(rawBody, signature);
-    check("11. A duplicate delivery of the same webhook is accepted (idempotent 200, not an error)", res.status === 200, res.data);
+    const res = await webhookPost(rawBody, signature, "evt_phase8_captured_001");
+    check("11. A duplicate delivery of the same webhook is accepted (idempotent 200, not an error)", res.status === 200 && res.data.duplicate === true, res.data);
+    const eventRows = sql(`select count(*) from public.payment_events where event_id = 'evt_phase8_captured_001';`);
+    check("    ...and the event is logged exactly once in payment_events", eventRows === "1", { eventRows });
 
     const subCount = sql(
       `select count(*) from public.user_subscriptions where user_id = '${MEERA_USER}' and role = 'designer' and status = 'active';`
     );
     check("    ...still exactly one active subscription (no duplicate created)", subCount === "1", { subCount });
 
-    const paymentCount = sql(`select count(*) from public.payments where provider_reference = 'pay_fixture_001';`);
+    const paymentCount = sql(`select count(*) from public.payments where provider_reference = 'pay_Fixture001';`);
     check("    ...still exactly one payment row references that Razorpay payment id", paymentCount === "1", { paymentCount });
   }
 
@@ -253,16 +271,16 @@ async function main() {
   console.log("\n=== 13. Subscription dates/status are stored correctly ===");
   {
     const row = sql(
-      `select status, (end_date > now()) as not_yet_expired, (end_date - start_date < interval '32 days') as about_one_month from public.user_subscriptions where user_id = '${MEERA_USER}' and role = 'designer' and status = 'active';`
+      `select status, (end_date > now()) as not_yet_expired, (end_date - start_date = interval '30 days') as exactly_30_days from public.user_subscriptions where user_id = '${MEERA_USER}' and role = 'designer' and status = 'active';`
     );
-    const [status, notExpired, aboutOneMonth] = row.split("|");
-    check("13. Activated subscription has status=active, a future end_date, ~1 month duration", status === "active" && notExpired === "t" && aboutOneMonth === "t", { row });
+    const [status, notExpired, exactly30] = row.split("|");
+    check("13. Activated subscription has status=active, a future end_date, exactly 30 days of access", status === "active" && notExpired === "t" && exactly30 === "t", { row });
   }
 
   console.log("\n=== 14. The paid plan takes effect; customers stay ungated ===");
   {
     const plan = await api(meera, "/api/designer/plan");
-    check("14. The designer is now on Designer Plus, not a trial, until about a month from now", plan.status === 200 && plan.data.current?.planKey === "designer_plus" && plan.data.current?.isTrial === false && !!plan.data.current?.endsAt, plan.data.current);
+    check("14. The designer is now on Designer Plus, not a trial, for 30 days", plan.status === 200 && plan.data.current?.planKey === "designer_plus" && plan.data.current?.isTrial === false && !!plan.data.current?.endsAt, plan.data.current);
     const home = await fetch(`${APP_URL}/home`, { headers: { cookie: aanya } });
     const homeText = await home.text();
     check("    Customer Home is not gated even with customer subscriptions switched on and no subscription", home.status === 200 && !homeText.includes("SUBSCRIPTION REQUIRED"), { status: home.status });
@@ -281,10 +299,12 @@ async function main() {
     check("    Non-admin cannot change payment settings", nonAdminSettings.status !== 200, nonAdminSettings.data);
   }
 
-  console.log("\n=== Cleanup: cancel the fixture subscription, disable payments again ===");
+  console.log("\n=== Cleanup: cancel changes nothing (plans don't renew), disable payments again ===");
   {
     const cancel = await api(meera, "/api/payments/cancel", { method: "POST", body: JSON.stringify({ role: "designer" }) });
-    check("    (cleanup) Real cancel endpoint works on the fixture subscription", cancel.status === 200, cancel.data);
+    check("    Cancel doesn't end paid access (409 non_renewing)", cancel.status === 409 && cancel.data.code === "non_renewing", cancel.data);
+    const stillActive = sql(`select count(*) from public.user_subscriptions where user_id = '${MEERA_USER}' and role = 'designer' and status = 'active' and end_date > now();`);
+    check("    ...and the paid subscription is still active", stillActive === "1", { stillActive });
 
     const disable = await api(admin, "/api/admin/settings/payment", { method: "PATCH", body: JSON.stringify({ paymentSystemEnabled: false }) });
     check("    (cleanup) Admin disables payments again (back to seeded default)", disable.status === 200, disable.data);

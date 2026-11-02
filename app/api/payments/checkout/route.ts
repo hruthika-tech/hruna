@@ -79,23 +79,31 @@ export async function POST(request: Request) {
     if (!plan) {
       return NextResponse.json({ status: "error", message: "No active plan is configured for this role." }, { status: 404 });
     }
+    // Verification only accepts captured INR payments of a positive amount — never take money for
+    // an order that could not then be activated.
+    if (plan.currency !== "INR" || !(Number(plan.price) > 0)) {
+      return NextResponse.json({ status: "error", code: "plan_misconfigured", message: "This plan can't be purchased right now." }, { status: 409 });
+    }
 
     // Duplicate-checkout guard (§14) — the partial unique index on user_subscriptions is the real
     // backstop against a conflicting SECOND active row, but rejecting here gives an honest,
     // immediate message instead of letting a user pay again for something they already have.
     // A running TRIAL doesn't block buying (activation ends it); an unexpired PAID plan does —
-    // there's no proration, so changing plan means cancelling first.
+    // there's no proration, so changing plan means waiting for the current one to end.
     const { data: activeRows } = await (supabase as unknown as SupabaseClient)
       .from("user_subscriptions")
       .select("id, end_date, is_trial")
       .eq("user_id", ctx.user.id)
       .eq("role", role)
       .eq("status", "active");
-    const paidActive = ((activeRows ?? []) as { end_date: string | null; is_trial: boolean }[]).some(
+    // Early renewal / upgrades are out of scope: no second purchase while paid days remain, so a
+    // designer is never billed twice for overlapping time.
+    const paidActive = ((activeRows ?? []) as { end_date: string | null; is_trial: boolean }[]).find(
       (s) => !s.is_trial && (!s.end_date || new Date(s.end_date).getTime() > Date.now())
     );
     if (paidActive) {
-      return NextResponse.json({ status: "error", message: "You already have an active paid plan." }, { status: 409 });
+      const until = paidActive.end_date ? ` until ${new Date(paidActive.end_date).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric", timeZone: "Asia/Kolkata" })}` : "";
+      return NextResponse.json({ status: "error", code: "plan_active", message: `You already have an active paid plan${until}. You can buy again once it ends.` }, { status: 409 });
     }
 
     // Service-role: payments_admin_write RLS is admin-only, by Phase 1's explicit design for this
@@ -123,7 +131,7 @@ export async function POST(request: Request) {
         amount: Number(plan.price),
         currency: plan.currency,
         receipt,
-        notes: { userId: ctx.user.id, role, planId: plan.id, paymentId: pendingPayment.id },
+        notes: { userId: ctx.user.id, role, planId: plan.id, planKey, paymentId: pendingPayment.id },
       });
     } catch (razorpayErr) {
       // Never leave an orphaned pending row if Razorpay itself rejected the order — mark it failed

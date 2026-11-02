@@ -1,131 +1,74 @@
 import "server-only";
 
 /**
- * The one place a successful Razorpay payment turns into an active subscription (Phase 8). Called
- * from BOTH `POST /api/payments/verify` (the client's own success callback) and the webhook
- * handler — Razorpay's own guidance is to treat the webhook as the authoritative source (the
- * client can close the browser mid-flow and never call back), while verifying synchronously too
- * gives the user instant feedback. Both paths converge here so the activation logic exists exactly
- * once, not twice with room to drift.
+ * The one place a verified Razorpay payment turns into paid access — called from BOTH
+ * `POST /api/payments/verify` (the browser's success callback, after the server re-checks the
+ * payment with Razorpay) and the webhook (the authoritative path when the browser never calls back).
  *
- * Uses the service-role client (lib/supabase/admin.ts) — required, not a convenience choice:
- * `payments`/`user_subscriptions` RLS is admin-write-only by Phase 1's own explicit design (see
- * that migration's comment: "the real subscribe/charge flow will run through a privileged service
- * ... not a raw client insert"). The caller of this function is never the browser and never
- * trusts a client-supplied user id — `paymentId` identifies a `payments` row that was already
- * created for a specific, already-authenticated user at checkout time.
+ * All the work happens inside the database in ONE transaction (public.activate_designer_payment,
+ * migration 20261101000001): the payment row is locked, the amount/currency re-checked, a pending
+ * OR previously-failed row accepted (a retry inside the same Razorpay checkout), any trial or lapsed
+ * row ended, exactly 30 days granted, and the payment marked succeeded + linked — or nothing at all
+ * changes. Calling it again for the same payment returns the existing result, so a duplicate webhook
+ * or a verify/webhook race can never create a second subscription or extend access twice.
+ *
+ * The functions are executable only by service_role, so this uses the server's admin client; the
+ * browser can never call them.
  */
 
-import { createAdminClient } from "@/lib/supabase/admin";
-import type { Tables } from "@/lib/supabase/types";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { isPlansNotReadyError } from "@/lib/subscriptions/plans";
+import { createAdminClient } from "@/lib/supabase/admin";
 
-export interface ActivationResult {
-  payment: Tables<"payments">;
-  /** True only if THIS call is the one that actually transitioned pending -> succeeded — false for
-   *  a duplicate webhook delivery / a verify-vs-webhook race the other side already won. */
-  activatedNow: boolean;
-  subscription: Tables<"user_subscriptions"> | null;
+export type ActivationCode =
+  | "invalid_input"
+  | "payment_not_found"
+  | "order_already_paid"
+  | "payment_refunded"
+  | "amount_mismatch"
+  | "payment_id_in_use"
+  | "not_a_designer_plan"
+  | "no_designer_profile";
+
+export type ActivationResult =
+  | { ok: true; activated: boolean; already: boolean; paymentId: string; subscriptionId: string; endDate: string | null }
+  | { ok: false; code: ActivationCode };
+
+// Untyped until types/supabase.ts is regenerated with these functions.
+const db = () => createAdminClient() as unknown as SupabaseClient;
+
+export async function activatePayment(input: { orderId: string; razorpayPaymentId: string; amountMinor: number; currency: string }): Promise<ActivationResult> {
+  const { data, error } = await db().rpc("activate_designer_payment", {
+    p_order_id: input.orderId,
+    p_razorpay_payment_id: input.razorpayPaymentId,
+    p_amount_minor: input.amountMinor,
+    p_currency: input.currency,
+  });
+  if (error) throw error;
+  const r = data as Record<string, unknown>;
+  if (!r.ok) return { ok: false, code: r.code as ActivationCode };
+  return {
+    ok: true,
+    activated: Boolean(r.activated),
+    already: Boolean(r.already),
+    paymentId: String(r.payment_id),
+    subscriptionId: String(r.subscription_id),
+    endDate: (r.end_date as string | null) ?? null,
+  };
 }
 
-export async function activateSubscriptionForPayment(paymentId: string, razorpayPaymentId: string): Promise<ActivationResult> {
-  const supabase = createAdminClient();
+/** Marks a still-pending (or failed) payment failed. Never downgrades a succeeded/refunded one. */
+export async function recordPaymentFailure(orderId: string, reason: string): Promise<boolean> {
+  const { data, error } = await db().rpc("record_payment_failure", { p_order_id: orderId, p_reason: reason });
+  if (error) throw error;
+  return Boolean((data as { changed?: boolean }).changed);
+}
 
-  // Atomic optimistic-concurrency transition — `.eq("status", "pending")` in the WHERE clause
-  // means only the request that actually finds the row still pending performs the update; a
-  // concurrent duplicate (webhook + client verify racing, or the webhook firing twice) affects
-  // zero rows and is treated as already-processed below, never as an error and never re-creates a
-  // subscription. This is the DB-level idempotency guarantee Step 14 asks for — no in-memory lock
-  // needed.
-  const { data: wonRace, error: updateError } = await supabase
-    .from("payments")
-    .update({ status: "succeeded", provider_reference: razorpayPaymentId, paid_at: new Date().toISOString() })
-    .eq("id", paymentId)
-    .eq("status", "pending")
-    .select()
-    .maybeSingle();
-  if (updateError) throw updateError;
-
-  if (!wonRace) {
-    const { data: current, error: fetchError } = await supabase.from("payments").select("*").eq("id", paymentId).maybeSingle();
-    if (fetchError) throw fetchError;
-    if (!current) throw new Error("Payment record not found.");
-    const { data: existingSub } = current.subscription_id
-      ? await supabase.from("user_subscriptions").select("*").eq("id", current.subscription_id).maybeSingle()
-      : { data: null };
-    return { payment: current, activatedNow: false, subscription: existingSub ?? null };
-  }
-
-  const payment = wonRace;
-
-  // Role isn't stored on `payments` directly — resolved from the plan, which is required at
-  // checkout-creation time (see the checkout route), so this is never null for a real payment.
-  const { data: plan, error: planError } = await supabase.from("subscription_plans").select("role").eq("id", payment.plan_id!).maybeSingle();
-  if (planError) throw planError;
-  if (!plan) throw new Error("The plan for this payment no longer exists.");
-
-  const now = new Date();
-  const end = new Date(now);
-  end.setMonth(end.getMonth() + 1);
-
-  // A paid plan replaces a running trial (ended now), and a row past its end date is expired:
-  // record both, so the one-active-subscription index admits the new paid row instead of this
-  // payment being linked to the trial.
-  const nowIso = now.toISOString();
-  const subs = (supabase as unknown as SupabaseClient).from("user_subscriptions");
-  const { error: endTrialError } = await subs
-    .update({ status: "expired", end_date: nowIso, updated_at: nowIso })
-    .eq("user_id", payment.user_id).eq("role", plan.role).eq("status", "active").eq("is_trial", true);
-  // No is_trial column = the plan migrations aren't applied, so there are no trials to end.
-  if (endTrialError && !isPlansNotReadyError(endTrialError)) throw endTrialError;
-  const { error: lapseError } = await (supabase as unknown as SupabaseClient).from("user_subscriptions")
-    .update({ status: "expired", updated_at: nowIso })
-    .eq("user_id", payment.user_id).eq("role", plan.role).eq("status", "active").lte("end_date", nowIso);
-  if (lapseError) throw lapseError;
-
-  const { data: subscription, error: insertError } = await supabase
-    .from("user_subscriptions")
-    .insert({
-      user_id: payment.user_id,
-      role: plan.role,
-      plan_id: payment.plan_id!,
-      status: "active",
-      start_date: now.toISOString(),
-      end_date: end.toISOString(),
-      renewal_date: end.toISOString(),
-    })
-    .select()
-    .single();
-
-  if (insertError) {
-    // 23505 on user_subscriptions_one_active_per_role — a near-simultaneous second successful
-    // payment for the same user+role (e.g. two checkout tabs). The charge is real and stays
-    // `succeeded` (never falsely marked failed over a linking race) — it's just linked to the
-    // ALREADY-active subscription instead of creating a conflicting second active row.
-    if ((insertError as { code?: string }).code === "23505") {
-      const { data: activeSub } = await supabase
-        .from("user_subscriptions")
-        .select("*")
-        .eq("user_id", payment.user_id)
-        .eq("role", plan.role)
-        .eq("status", "active")
-        .maybeSingle();
-      if (activeSub) {
-        await supabase.from("payments").update({ subscription_id: activeSub.id }).eq("id", payment.id);
-      }
-      return { payment: { ...payment, subscription_id: activeSub?.id ?? payment.subscription_id }, activatedNow: true, subscription: activeSub ?? null };
-    }
-    throw insertError;
-  }
-
-  const { data: updatedPayment, error: linkError } = await supabase
-    .from("payments")
-    .update({ subscription_id: subscription!.id })
-    .eq("id", payment.id)
-    .select()
-    .single();
-  if (linkError) throw linkError;
-
-  return { payment: updatedPayment, activatedNow: true, subscription: subscription! };
+/** Records Razorpay's cumulative refunded amount; a full refund ends the plan that payment bought. */
+export async function applyRefund(razorpayPaymentId: string, amountRefundedMinor: number) {
+  const { data, error } = await db().rpc("apply_payment_refund", {
+    p_razorpay_payment_id: razorpayPaymentId,
+    p_amount_refunded_minor: amountRefundedMinor,
+  });
+  if (error) throw error;
+  return data as { ok: boolean; code?: string; full?: boolean };
 }

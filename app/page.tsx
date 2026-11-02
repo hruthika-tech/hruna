@@ -13,7 +13,7 @@ import { createClient } from "@/lib/supabase/server";
 import { listApprovedDesigners, listDresses, getPlatformStats } from "@/lib/customer/discovery";
 import { redirect } from "next/navigation";
 import { strayEmailLinkPath } from "@/lib/auth/auth-flows";
-import { DEFAULT_DESCRIPTION, DEFAULT_TITLE, pageMetadata } from "@/lib/seo";
+import { DEFAULT_DESCRIPTION, DEFAULT_TITLE, pageMetadata, siteJsonLd } from "@/lib/seo";
 
 export const metadata = pageMetadata({ title: DEFAULT_TITLE, absoluteTitle: true, description: DEFAULT_DESCRIPTION, path: "/" });
 
@@ -40,6 +40,7 @@ export default async function LandingPage({ searchParams }: { searchParams: Reco
 
   return (
     <div>
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: siteJsonLd() }} />
       <LandingHeader />
       {/* Indian-couture visual experiment (homepage only): sections 01–04 use the couture
           variants in components/landing/couture/; the original section components are unchanged
