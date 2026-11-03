@@ -91,10 +91,12 @@ export function CoutureHero() {
             Where your style finds its story.
           </motion.p>
 
-          <motion.p {...fadeUp(1.0)} className="hc-motion hc-hero-copy text-[#fbf3e6] text-body-lg max-w-md mt-5">
-            HRUNA is where you discover independent designers and pieces that feel personal — not
-            mass-produced, made for you.
-          </motion.p>
+          {/* The page's descriptive heading (the h1 is the wordmark). font-body keeps it looking like
+              body copy despite the global h2 display font. */}
+          <motion.h2 {...fadeUp(1.0)} className="hc-motion hc-hero-copy font-body text-[#fbf3e6] text-body-lg max-w-md mt-5">
+            Custom-made clothing from independent fashion designers, boutiques and tailors in India —
+            pieces that feel personal, not mass-produced.
+          </motion.h2>
 
           <div className="flex flex-wrap items-center gap-5 mt-9">
             <motion.div {...fadeUp(1.2)} className="hc-motion">

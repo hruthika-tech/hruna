@@ -173,7 +173,7 @@ console.log("\n=== Public page metadata ===");
   check("descriptions are unique across public pages", new Set(descriptions).size === descriptions.length);
   check("non-home titles use the '| HRUNA' template", [...seen].filter(([p]) => p !== "/").every(([, s]) => s.title.endsWith(" | HRUNA")), titles);
   const home = seen.get("/");
-  check("homepage: full brand title and exactly one <h1>", home.title === "HRUNA — Where Vision Meets Craft" && home.h1 === 1, home);
+  check("homepage: full brand title and exactly one <h1>", home.title === "HRUNA — Custom Clothing from Independent Fashion Designers in India" && home.h1 === 1, home);
   const homeHtml = (await get("/")).text;
   const h1 = homeHtml.match(/<h1\b[^>]*>([\s\S]*?)<\/h1>/);
   // The hero's colours/classes are a design choice (the couture homepage restyled them); SEO only

@@ -13,9 +13,18 @@ import { createClient } from "@/lib/supabase/server";
 import { listApprovedDesigners, listDresses, getPlatformStats } from "@/lib/customer/discovery";
 import { redirect } from "next/navigation";
 import { strayEmailLinkPath } from "@/lib/auth/auth-flows";
-import { DEFAULT_DESCRIPTION, DEFAULT_TITLE, pageMetadata, siteJsonLd } from "@/lib/seo";
+import { pageMetadata, siteJsonLd } from "@/lib/seo";
 
-export const metadata = pageMetadata({ title: DEFAULT_TITLE, absoluteTitle: true, description: DEFAULT_DESCRIPTION, path: "/" });
+// The homepage owns "custom-made clothing from independent designers in India" (Discover owns the
+// designer directory, About the how-it-works process); the site-wide defaults in lib/seo.ts stay the
+// brand tagline.
+export const metadata = pageMetadata({
+  title: "HRUNA — Custom Clothing from Independent Fashion Designers in India",
+  absoluteTitle: true,
+  description:
+    "Custom-made clothing from independent fashion designers, boutiques and tailors in India. Browse verified studios, compare proposals, get a piece made for you.",
+  path: "/",
+});
 
 // The landing page is a thin server-side orchestrator: fetch real data once, hand it down to six
 // section components (components/landing/sections/) rather than one giant page file. No mock/seed
