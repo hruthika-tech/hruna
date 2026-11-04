@@ -9,6 +9,7 @@ import { SectionCircularCarousel } from "@/components/landing/couture/SectionCir
 import "@/components/landing/couture/couture.css";
 import { CoutureWhyHruna } from "@/components/landing/couture/CoutureWhyHruna";
 import { CoutureFinalCTA } from "@/components/landing/couture/CoutureFinalCTA";
+import { LazyBackgrounds } from "@/components/landing/couture/LazyBackgrounds";
 import { createClient } from "@/lib/supabase/server";
 import { listApprovedDesigners, listDresses, getPlatformStats } from "@/lib/customer/discovery";
 import { redirect } from "next/navigation";
@@ -50,6 +51,11 @@ export default async function LandingPage({ searchParams }: { searchParams: Reco
   return (
     <div>
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: siteJsonLd() }} />
+      {/* The phone hero's embroidered backdrop is the largest paint on phones but lives in CSS
+          (.hc-m-hero-bg), so the browser would only find it after the stylesheet. Phones only (the
+          backdrop is md:hidden); browsers without AVIF skip this and use the WebP from the CSS. */}
+      <link rel="preload" as="image" href="/images/couture/mobile/hero-pink-tile.avif" type="image/avif" media="(max-width: 767px)" fetchPriority="high" />
+      <LazyBackgrounds />
       <LandingHeader />
       {/* Indian-couture visual experiment (homepage only): sections 01–04 use the couture
           variants in components/landing/couture/; the original section components are unchanged

@@ -59,7 +59,10 @@
   position: absolute;
   inset: 0;
   pointer-events: none;
-  background: url("/images/couture/mobile/hero-pink-tile.jpg") center top / max(100%, 836px) auto repeat-y, #b8687c;
+  background: url("/images/couture/mobile/hero-pink-tile.webp") center top / max(100%, 836px) auto repeat-y, #b8687c;
+  /* The phone LCP image: AVIF where supported (preloaded by app/page.tsx), WebP otherwise. Browsers
+     without image-set type() ignore this line and keep the WebP above. */
+  background-image: image-set(url("/images/couture/mobile/hero-pink-tile.avif") type("image/avif"), url("/images/couture/mobile/hero-pink-tile.webp") type("image/webp"));
 }
 @media (min-resolution: 3dppx) {
   .hc-m-hero-bg { background-size: max(100%, 557px) auto; }
@@ -198,8 +201,8 @@
 .hc-footer {
   position: relative;
   background:
-    url("/images/couture/footer/footer-top.jpg") top center / 100% auto no-repeat,
-    url("/images/couture/footer/footer-bottom.jpg") bottom center / 100% auto no-repeat,
+    url("/images/couture/footer/footer-top.webp") top center / 100% auto no-repeat,
+    url("/images/couture/footer/footer-bottom.webp") bottom center / 100% auto no-repeat,
     #0f3a17;
   padding-top: calc(10.77vw + 4px);
   padding-bottom: calc(12.32vw + 4px);
@@ -213,7 +216,7 @@
   bottom: 12.32vw;
   /* Mirrored silk tile (1672 × 1110), drawn at the source native resolution for the screen
      density (one image pixel per device pixel) and never narrower than the footer. */
-  background: url("/images/couture/footer/footer-silk-tile.jpg") center top / max(100%, 1672px) auto repeat-y;
+  background: url("/images/couture/footer/footer-silk-tile.webp") center top / max(100%, 1672px) auto repeat-y;
   pointer-events: none;
 }
 @media (min-resolution: 1.25dppx) {
@@ -256,7 +259,7 @@
 .hc-m-journey-bg {
   background:
     linear-gradient(rgba(8, 20, 12, 0.32), rgba(8, 20, 12, 0.32)),
-    url("/images/couture/mobile/journey-silk-tile.jpg") center top / max(100%, 836px) auto repeat-y,
+    url("/images/couture/mobile/journey-silk-tile.webp") center top / max(100%, 836px) auto repeat-y,
     #10301c;
 }
 @media (min-resolution: 3dppx) {
@@ -266,7 +269,7 @@
 }
 .hc-m-mood-bg {
   /* Middle: plain damask from the centre of the artwork, mirrored so it repeats seamlessly. */
-  background: url("/images/couture/mobile/moodboard-damask-tile.jpg") center top / max(100%, 334px) auto repeat-y, #731419;
+  background: url("/images/couture/mobile/moodboard-damask-tile.webp") center top / max(100%, 334px) auto repeat-y, #731419;
 }
 /* Top and bottom: the artwork itself drawn 1.3× the screen width (centred) so its gold filigree,
    hanging ornaments and saree drapes read large and clear on a narrow phone, at about native
@@ -278,7 +281,7 @@
   left: -15%;
   right: -15%;
   aspect-ratio: 1672 / 941;
-  background-image: url("/images/couture/moodboard-burgundy-saree.png");
+  background-image: url("/images/couture/moodboard-burgundy-saree.webp");
   background-size: 100% auto;
   background-repeat: no-repeat;
 }
@@ -303,8 +306,8 @@
   z-index: 0;
   pointer-events: none;
   background:
-    url("/images/couture/mobile/cta-border.jpg") center bottom / auto 112px repeat-x,
-    url("/images/couture/mobile/cta-silk-tile.jpg") center top / max(100%, 921px) auto repeat-y,
+    url("/images/couture/mobile/cta-border.webp") center bottom / auto 112px repeat-x,
+    url("/images/couture/mobile/cta-silk-tile.webp") center top / max(100%, 921px) auto repeat-y,
     #0d3d1f;
 }
 
@@ -334,6 +337,23 @@
     zoom: 0.8;
     width: 125%; /* 1 / zoom: fills its slot after scaling, so the card stays centred on the page */
   }
+  .hc-book-backdrop:not(.hc-bg-on) {
+    background-image: none !important;
+  }
+}
+
+/* Below-the-fold backdrops load only as their section nears the viewport: until LazyBackgrounds
+   (components/landing/couture/LazyBackgrounds.tsx) adds .hc-bg-on, each shows just its own solid
+   colour, so these images don't compete with the hero image (the phone LCP) on first load. Only
+   background-image is switched off here, so every size/position/density rule above still applies. */
+.hc-m-journey-bg:not(.hc-bg-on),
+.hc-m-mood-bg:not(.hc-bg-on),
+.hc-m-mood-bg:not(.hc-bg-on)::before,
+.hc-m-mood-bg:not(.hc-bg-on)::after,
+.hc-m-cta-bg:not(.hc-bg-on),
+.hc-footer:not(.hc-bg-on),
+.hc-footer:not(.hc-bg-on)::before {
+  background-image: none;
 }
 
 @media (prefers-reduced-motion: reduce) {
